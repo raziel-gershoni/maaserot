@@ -1,0 +1,92 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id             String   @id @default(cuid())
+  email          String   @unique
+  name           String?
+  passwordHash   String
+  defaultPercent Int      @default(10)
+  locale         String   @default("he")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  fixedCharities FixedCharity[]
+  incomes        Income[]
+  monthStates    MonthState[]
+  sharedWith     SharedAccess[] @relation("owner")
+  sharedFrom     SharedAccess[] @relation("viewer")
+}
+
+model FixedCharity {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  amount    Int      // in agorot/cents for precision
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model Income {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  month       String   // "2024-01" for queries
+  amount      Int      // gross income (agorot)
+  percentage  Int      // user's % at time of entry
+  maaser      Int      // calculated: amount × %
+  description String?
+  createdAt   DateTime @default(now())
+
+  @@index([userId, month])
+}
+
+model MonthState {
+  id                     String    @id @default(cuid())
+  userId                 String
+  user                   User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  month                  String    // "2024-01"
+
+  // Snapshot at time of calculation
+  totalMaaser            Int
+  fixedCharitiesTotal    Int
+  extraToGive            Int       // max(0, totalMaaser - fixedCharities)
+
+  // Status
+  isPaid                 Boolean   @default(false)
+  paidAt                 DateTime?
+
+  // Snapshot of fixed charities for history
+  fixedCharitiesSnapshot Json      // [{name, amount}]
+
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+
+  @@unique([userId, month])
+  @@index([userId])
+}
+
+model SharedAccess {
+  id        String   @id @default(cuid())
+  ownerId   String
+  owner     User     @relation("owner", fields: [ownerId], references: [id], onDelete: Cascade)
+  viewerId  String
+  viewer    User     @relation("viewer", fields: [viewerId], references: [id], onDelete: Cascade)
+  canEdit   Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@unique([ownerId, viewerId])
+  @@index([ownerId])
+  @@index([viewerId])
+}

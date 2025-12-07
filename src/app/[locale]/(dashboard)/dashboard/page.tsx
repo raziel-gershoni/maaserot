@@ -1,0 +1,144 @@
+import { redirect } from 'next/navigation';
+import { auth } from '@/lib/auth';
+import { prisma } from '@/lib/prisma';
+import { getCurrentMonth, formatCurrency } from '@/lib/calculations';
+import { getTranslations } from 'next-intl/server';
+import { Link } from '@/i18n/routing';
+import MarkAsPaidButton from '@/components/MarkAsPaidButton';
+
+export default async function DashboardPage() {
+  const session = await auth();
+
+  if (!session?.user?.id) {
+    redirect('/login');
+  }
+
+  const t = await getTranslations('dashboard');
+  const currentMonth = getCurrentMonth();
+
+  // Fetch current month's data
+  const monthState = await prisma.monthState.findUnique({
+    where: {
+      userId_month: {
+        userId: session.user.id,
+        month: currentMonth,
+      },
+    },
+  });
+
+  const incomes = await prisma.income.findMany({
+    where: {
+      userId: session.user.id,
+      month: currentMonth,
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { locale: true },
+  });
+
+  const locale = user?.locale || 'he';
+
+  return (
+    <div className="p-4 md:p-8">
+      <div className="max-w-5xl mx-auto">
+        {/* Header */}
+        <div className="mb-6 md:mb-8">
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-900 dark:text-white mb-2">{t('title')}</h1>
+          <p className="text-sm sm:text-base text-gray-700 dark:text-gray-300">{t('subtitle')}</p>
+        </div>
+
+        {/* Quick Actions */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 md:gap-4 mb-6 md:mb-8">
+          <Link href="/income" className="bg-blue-600 hover:bg-blue-700 dark:bg-blue-700 dark:hover:bg-blue-600 text-white rounded-lg p-5 md:p-6 text-center font-semibold shadow-md transition active:scale-95 text-sm sm:text-base">
+            + {t('addIncome')}
+          </Link>
+          <Link href="/charities" className="bg-green-600 hover:bg-green-700 dark:bg-green-700 dark:hover:bg-green-600 text-white rounded-lg p-5 md:p-6 text-center font-semibold shadow-md transition active:scale-95 text-sm sm:text-base">
+            {t('manageCharities')}
+          </Link>
+          <Link href="/history" className="bg-purple-600 hover:bg-purple-700 dark:bg-purple-700 dark:hover:bg-purple-600 text-white rounded-lg p-5 md:p-6 text-center font-semibold shadow-md transition active:scale-95 text-sm sm:text-base sm:col-span-2 md:col-span-1">
+            {t('viewHistory')}
+          </Link>
+        </div>
+
+        {monthState ? (
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 md:p-8 mb-6 border border-gray-200 dark:border-gray-700">
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">{t('currentMonth')}</h2>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+              <div className="bg-blue-50 dark:bg-blue-900/30 rounded-lg p-5 border border-blue-200 dark:border-blue-700">
+                <p className="text-sm font-medium text-blue-800 dark:text-blue-200 mb-1">{t('totalMaaser')}</p>
+                <p className="text-3xl font-bold text-blue-900 dark:text-blue-100">
+                  {formatCurrency(monthState.totalMaaser, locale)}
+                </p>
+              </div>
+              <div className="bg-green-50 dark:bg-green-900/30 rounded-lg p-5 border border-green-200 dark:border-green-700">
+                <p className="text-sm font-medium text-green-800 dark:text-green-200 mb-1">{t('fixedCharities')}</p>
+                <p className="text-3xl font-bold text-green-900 dark:text-green-100">
+                  {formatCurrency(monthState.fixedCharitiesTotal, locale)}
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-900/30 dark:to-purple-900/30 rounded-lg p-6 border-2 border-indigo-200 dark:border-indigo-700">
+              <p className="text-sm font-medium text-indigo-800 dark:text-indigo-200 mb-2">{t('extraToGive')}</p>
+              <p className="text-4xl font-bold text-indigo-900 dark:text-indigo-100 mb-4">
+                {formatCurrency(monthState.extraToGive, locale)}
+              </p>
+
+              <div className="flex items-center gap-3">
+                <span className={`inline-block px-4 py-2 rounded-lg text-sm font-bold ${
+                  monthState.isPaid
+                    ? 'bg-green-600 text-white dark:bg-green-700'
+                    : 'bg-yellow-500 text-gray-900 dark:bg-yellow-600 dark:text-gray-100'
+                }`}>
+                  {monthState.isPaid ? '✓ ' + t('paid') : '⏳ ' + t('unpaid')}
+                </span>
+                {!monthState.isPaid && monthState.extraToGive > 0 && (
+                  <MarkAsPaidButton month={currentMonth} label={t('markAsPaid')} />
+                )}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-8 mb-6 border border-gray-200 dark:border-gray-700 text-center">
+            <p className="text-xl text-gray-700 dark:text-gray-300 mb-4">{t('nothingToPay')}</p>
+            <p className="text-gray-600 dark:text-gray-400">{t('addFirstIncome')}</p>
+          </div>
+        )}
+
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 md:p-8 border border-gray-200 dark:border-gray-700">
+          <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">{t('recentIncome')}</h3>
+          {incomes.length > 0 ? (
+            <ul className="space-y-3">
+              {incomes.map((income) => (
+                <li key={income.id} className="border-b border-gray-200 dark:border-gray-700 pb-3 last:border-0">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <span className="text-lg font-semibold text-gray-900 dark:text-gray-100">{income.description || t('income')}</span>
+                      <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                        {t('maaser')}: {formatCurrency(income.maaser, locale)} ({income.percentage}%)
+                      </div>
+                    </div>
+                    <span className="text-xl font-bold text-gray-900 dark:text-gray-100">
+                      {formatCurrency(income.amount, locale)}
+                    </span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="text-center py-12">
+              <p className="text-gray-600 dark:text-gray-400 text-lg mb-4">{t('noIncomeThisMonth')}</p>
+              <Link href="/income" className="inline-block px-6 py-3 bg-blue-600 hover:bg-blue-700 dark:bg-blue-700 dark:hover:bg-blue-600 text-white rounded-lg font-semibold transition">
+                + {t('addFirstIncome')}
+              </Link>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
