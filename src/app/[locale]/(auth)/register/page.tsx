@@ -13,6 +13,7 @@ export default function RegisterPage() {
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
   const t = useTranslations('auth');
+  const tc = useTranslations('common');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -45,7 +46,7 @@ export default function RegisterPage() {
       {/* Header */}
       <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 py-4">
         <div className="max-w-7xl mx-auto flex justify-between items-center">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">מעשרות / Maaserot</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{tc('appName')}</h1>
           <LanguageSwitcher />
         </div>
       </header>
