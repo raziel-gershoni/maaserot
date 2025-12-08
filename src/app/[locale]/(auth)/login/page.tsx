@@ -40,12 +40,21 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
-      <div className="max-w-md w-full space-y-8 p-8 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700">
-        <div className="flex justify-between items-center">
-          <h2 className="text-3xl font-bold text-gray-900 dark:text-white">{t('login')}</h2>
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      {/* Header */}
+      <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 py-4">
+        <div className="max-w-7xl mx-auto flex justify-between items-center">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">מעשרות / Maaserot</h1>
           <LanguageSwitcher />
         </div>
+      </header>
+
+      {/* Login Card */}
+      <div className="flex items-center justify-center px-4 py-12">
+        <div className="max-w-md w-full space-y-8 p-8 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700">
+          <div>
+            <h2 className="text-3xl font-bold text-gray-900 dark:text-white">{t('login')}</h2>
+          </div>
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
           {error && (
             <div className="bg-red-50 dark:bg-red-900/30 text-red-800 dark:text-red-200 p-3 rounded-lg border border-red-200 dark:border-red-700">{error}</div>
@@ -96,6 +105,7 @@ export default function LoginPage() {
             </Link>
           </div>
         </form>
+        </div>
       </div>
     </div>
   );
