@@ -139,7 +139,7 @@ export async function PATCH(request: Request) {
               totalMaaser: monthStateData.totalMaaser,
               fixedCharitiesTotal: monthStateData.fixedCharitiesTotal,
               extraToGive: monthStateData.extraToGive,
-              fixedCharitiesSnapshot: monthStateData.fixedCharitiesSnapshot,
+              fixedCharitiesSnapshot: monthStateData.fixedCharitiesSnapshot as any,
             },
             create: {
               userId: session.user.id,
@@ -147,7 +147,7 @@ export async function PATCH(request: Request) {
               totalMaaser: monthStateData.totalMaaser,
               fixedCharitiesTotal: monthStateData.fixedCharitiesTotal,
               extraToGive: monthStateData.extraToGive,
-              fixedCharitiesSnapshot: monthStateData.fixedCharitiesSnapshot,
+              fixedCharitiesSnapshot: monthStateData.fixedCharitiesSnapshot as any,
               isPaid: false,
             },
           });

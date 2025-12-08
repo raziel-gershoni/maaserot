@@ -33,7 +33,7 @@ async function recalculateMonthState(userId: string, month: string) {
       totalMaaser: monthStateData.totalMaaser,
       fixedCharitiesTotal: monthStateData.fixedCharitiesTotal,
       extraToGive: monthStateData.extraToGive,
-      fixedCharitiesSnapshot: monthStateData.fixedCharitiesSnapshot,
+      fixedCharitiesSnapshot: monthStateData.fixedCharitiesSnapshot as any,
     },
     create: {
       userId,
@@ -41,7 +41,7 @@ async function recalculateMonthState(userId: string, month: string) {
       totalMaaser: monthStateData.totalMaaser,
       fixedCharitiesTotal: monthStateData.fixedCharitiesTotal,
       extraToGive: monthStateData.extraToGive,
-      fixedCharitiesSnapshot: monthStateData.fixedCharitiesSnapshot,
+      fixedCharitiesSnapshot: monthStateData.fixedCharitiesSnapshot as any,
       isPaid: false,
     },
   });
