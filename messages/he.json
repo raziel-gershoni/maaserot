@@ -14,6 +14,7 @@
     "income": "הכנסות",
     "charities": "תרומות קבועות",
     "history": "היסטוריה",
+    "shared": "שיתוף",
     "settings": "הגדרות"
   },
   "auth": {
@@ -144,9 +145,31 @@
     "passwordChangeFailed": "שינוי הסיסמה נכשל"
   },
   "shared": {
-    "title": "משותף",
-    "shareAccess": "שיתוף גישה",
-    "sharedWith": "משותף עם",
-    "viewOnly": "צפייה בלבד"
+    "title": "שיתוף",
+    "subtitle": "שתף את נתוני המעשר שלך או צפה בנתונים משותפים",
+    "shareAccess": "שתף גישה",
+    "userEmail": "אימייל משתמש",
+    "emailPlaceholder": "example@email.com",
+    "allowEdit": "אפשר עריכה",
+    "sharing": "משתף...",
+    "shared": "שותף!",
+    "share": "שתף",
+    "shareSuccess": "הגישה שותפה בהצלחה!",
+    "shareFailed": "שיתוף הגישה נכשל",
+    "errorOccurred": "אירעה שגיאה",
+    "sharingWith": "משתף עם",
+    "sharedWithYou": "משותף איתך",
+    "notSharingWithAnyone": "לא משתף עם אף אחד כרגע",
+    "noOneSharing": "אף אחד לא משתף איתך כרגע",
+    "viewOnly": "צפייה בלבד",
+    "canEdit": "יכול לערוך",
+    "revoke": "בטל",
+    "revokeConfirm": "האם אתה בטוח שברצונך לבטל את הגישה?",
+    "view": "צפה",
+    "combinedSummary": "סיכום משולב",
+    "show": "הצג",
+    "hide": "הסתר",
+    "unpaid": "לא שולם",
+    "totalUnpaid": "סה\"כ לא שולם"
   }
 }

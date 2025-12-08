@@ -14,6 +14,7 @@
     "income": "Income",
     "charities": "Charities",
     "history": "History",
+    "shared": "Sharing",
     "settings": "Settings"
   },
   "auth": {
@@ -144,9 +145,31 @@
     "passwordChangeFailed": "Failed to change password"
   },
   "shared": {
-    "title": "Shared",
+    "title": "Sharing",
+    "subtitle": "Share your maaser data or view shared data from others",
     "shareAccess": "Share Access",
-    "sharedWith": "Shared With",
-    "viewOnly": "View Only"
+    "userEmail": "User Email",
+    "emailPlaceholder": "example@email.com",
+    "allowEdit": "Allow editing",
+    "sharing": "Sharing...",
+    "shared": "Shared!",
+    "share": "Share",
+    "shareSuccess": "Access shared successfully!",
+    "shareFailed": "Failed to share access",
+    "errorOccurred": "An error occurred",
+    "sharingWith": "Sharing With",
+    "sharedWithYou": "Shared With You",
+    "notSharingWithAnyone": "Not sharing with anyone yet",
+    "noOneSharing": "No one is sharing with you yet",
+    "viewOnly": "View Only",
+    "canEdit": "Can Edit",
+    "revoke": "Revoke",
+    "revokeConfirm": "Are you sure you want to revoke this access?",
+    "view": "View",
+    "combinedSummary": "Combined Summary",
+    "show": "Show",
+    "hide": "Hide",
+    "unpaid": "Unpaid",
+    "totalUnpaid": "Total Unpaid"
   }
 }
