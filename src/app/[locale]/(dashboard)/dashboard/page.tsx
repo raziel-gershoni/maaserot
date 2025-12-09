@@ -140,14 +140,14 @@ export default async function DashboardPage() {
         </div>
 
         {/* Quick Actions */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 md:gap-3 mb-4 md:mb-6">
+        <div className="grid grid-cols-3 gap-2 md:gap-3 mb-4 md:mb-6">
           <Link href="/income" className="bg-blue-600 hover:bg-blue-700 dark:bg-blue-700 dark:hover:bg-blue-600 text-white rounded-lg p-3 md:p-4 text-center font-semibold shadow-md transition active:scale-95 text-sm">
             + {t('addIncome')}
           </Link>
           <Link href="/charities" className="bg-green-600 hover:bg-green-700 dark:bg-green-700 dark:hover:bg-green-600 text-white rounded-lg p-3 md:p-4 text-center font-semibold shadow-md transition active:scale-95 text-sm">
             {t('manageCharities')}
           </Link>
-          <Link href="/history" className="bg-purple-600 hover:bg-purple-700 dark:bg-purple-700 dark:hover:bg-purple-600 text-white rounded-lg p-3 md:p-4 text-center font-semibold shadow-md transition active:scale-95 text-sm sm:col-span-2 md:col-span-1">
+          <Link href="/history" className="bg-purple-600 hover:bg-purple-700 dark:bg-purple-700 dark:hover:bg-purple-600 text-white rounded-lg p-3 md:p-4 text-center font-semibold shadow-md transition active:scale-95 text-sm">
             {t('viewHistory')}
           </Link>
         </div>
