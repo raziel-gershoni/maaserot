@@ -169,6 +169,8 @@
     "combinedSummary": "Combined Summary",
     "show": "Show",
     "hide": "Hide",
+    "totalMaaser": "Total Maaser",
+    "totalFixedCharities": "Total Fixed Charities",
     "unpaid": "Unpaid",
     "totalUnpaid": "Total Unpaid"
   }

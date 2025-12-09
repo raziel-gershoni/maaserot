@@ -18,11 +18,10 @@ interface SharedAccess {
   createdAt: string;
 }
 
-interface UnpaidSummary {
-  userId: string;
-  userName: string;
-  userEmail: string;
-  extraToGive: number;
+interface CombinedSummary {
+  totalMaaser: number;
+  totalFixedCharities: number;
+  unpaid: number;
 }
 
 export default function SharedPage() {
@@ -34,7 +33,7 @@ export default function SharedPage() {
 
   const [sharingWith, setSharingWith] = useState<SharedAccess[]>([]);
   const [sharedWithMe, setSharedWithMe] = useState<SharedAccess[]>([]);
-  const [combinedSummary, setCombinedSummary] = useState<UnpaidSummary[]>([]);
+  const [combinedSummary, setCombinedSummary] = useState<CombinedSummary | null>(null);
   const [showCombined, setShowCombined] = useState(false);
   const [locale, setLocale] = useState('he');
 
@@ -76,7 +75,7 @@ export default function SharedPage() {
       const response = await fetch('/api/shared/summary');
       if (response.ok) {
         const data = await response.json();
-        setCombinedSummary(data.summary || []);
+        setCombinedSummary(data);
         setShowCombined(true);
       }
     } catch (error) {
@@ -131,8 +130,6 @@ export default function SharedPage() {
       console.error('Failed to revoke access:', error);
     }
   };
-
-  const totalUnpaid = combinedSummary.reduce((sum, item) => sum + item.extraToGive, 0);
 
   return (
     <div className="p-4 md:p-8">
@@ -211,30 +208,27 @@ export default function SharedPage() {
               </button>
             </div>
 
-            {showCombined && (
+            {showCombined && combinedSummary && (
               <div className="space-y-4">
-                {combinedSummary.map((item) => (
-                  <div key={item.userId} className="flex justify-between items-center p-4 bg-gray-50 dark:bg-gray-900 rounded-lg">
-                    <div>
-                      <p className="font-semibold text-gray-900 dark:text-white">
-                        {item.userName || item.userEmail}
-                      </p>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">{item.userEmail}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-lg font-bold text-indigo-900 dark:text-indigo-100">
-                        {formatCurrency(item.extraToGive, locale)}
-                      </p>
-                      <p className="text-xs text-gray-600 dark:text-gray-400">{t('unpaid')}</p>
-                    </div>
-                  </div>
-                ))}
+                <div className="flex justify-between items-center p-4 bg-gray-50 dark:bg-gray-900 rounded-lg">
+                  <p className="font-semibold text-gray-900 dark:text-white">{t('totalMaaser')}</p>
+                  <p className="text-lg font-bold text-gray-900 dark:text-white">
+                    {formatCurrency(combinedSummary.totalMaaser, locale)}
+                  </p>
+                </div>
+
+                <div className="flex justify-between items-center p-4 bg-gray-50 dark:bg-gray-900 rounded-lg">
+                  <p className="font-semibold text-gray-900 dark:text-white">{t('totalFixedCharities')}</p>
+                  <p className="text-lg font-bold text-gray-900 dark:text-white">
+                    {formatCurrency(combinedSummary.totalFixedCharities, locale)}
+                  </p>
+                </div>
 
                 <div className="border-t-2 border-gray-300 dark:border-gray-600 pt-4 mt-4">
                   <div className="flex justify-between items-center p-4 bg-indigo-50 dark:bg-indigo-900/30 rounded-lg border border-indigo-200 dark:border-indigo-700">
-                    <p className="text-lg font-bold text-gray-900 dark:text-white">{t('totalUnpaid')}</p>
+                    <p className="text-lg font-bold text-gray-900 dark:text-white">{t('unpaid')}</p>
                     <p className="text-2xl font-bold text-indigo-900 dark:text-indigo-100">
-                      {formatCurrency(totalUnpaid, locale)}
+                      {formatCurrency(combinedSummary.unpaid, locale)}
                     </p>
                   </div>
                 </div>
