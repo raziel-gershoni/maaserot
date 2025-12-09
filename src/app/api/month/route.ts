@@ -48,6 +48,21 @@ export async function PATCH(request: Request) {
       );
     }
 
+    // If marking as paid, freeze all existing incomes for this month
+    if (isPaid) {
+      await prisma.income.updateMany({
+        where: {
+          userId: session.user.id,
+          month,
+          isFrozen: false, // Only update incomes that aren't already frozen
+        },
+        data: {
+          isFrozen: true,
+        },
+      });
+    }
+
+    // Update month state
     const monthState = await prisma.monthState.update({
       where: {
         userId_month: {

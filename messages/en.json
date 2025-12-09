@@ -179,5 +179,9 @@
     "unpaid": "Unpaid",
     "totalUnpaid": "Total Unpaid",
     "viewGroupDashboard": "View Group Dashboard"
+  },
+  "errors": {
+    "cannotEditFrozenIncome": "Cannot edit income that was recorded before the month was marked as paid",
+    "cannotDeleteFrozenIncome": "Cannot delete income that was recorded before the month was marked as paid"
   }
 }

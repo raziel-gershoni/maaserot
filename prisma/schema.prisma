@@ -47,6 +47,7 @@ model Income {
   percentage  Int      // user's % at time of entry
   maaser      Int      // calculated: amount × %
   description String?
+  isFrozen    Boolean  @default(false) // frozen incomes cannot be edited/deleted
   createdAt   DateTime @default(now())
 
   @@index([userId, month])

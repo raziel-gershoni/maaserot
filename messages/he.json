@@ -179,5 +179,9 @@
     "unpaid": "לא שולם",
     "totalUnpaid": "סה\"כ לא שולם",
     "viewGroupDashboard": "צפה בלוח קבוצתי"
+  },
+  "errors": {
+    "cannotEditFrozenIncome": "לא ניתן לערוך הכנסה שנקלטה לפני שהחודש סומן כשולם",
+    "cannotDeleteFrozenIncome": "לא ניתן למחוק הכנסה שנקלטה לפני שהחודש סומן כשולם"
   }
 }

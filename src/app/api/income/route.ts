@@ -4,7 +4,11 @@ import { prisma } from '@/lib/prisma';
 import { calculateMonthState, getCurrentMonth } from '@/lib/calculations';
 
 // Helper function to recalculate month state after income changes
-async function recalculateMonthState(userId: string, month: string) {
+async function recalculateMonthState(
+  userId: string,
+  month: string,
+  options?: { resetIsPaid?: boolean }
+) {
   const allIncomes = await prisma.income.findMany({
     where: { userId, month },
   });
@@ -25,16 +29,25 @@ async function recalculateMonthState(userId: string, month: string) {
     existingMonthState?.isPaid || false
   );
 
+  // Build update data
+  const updateData: any = {
+    totalMaaser: monthStateData.totalMaaser,
+    fixedCharitiesTotal: monthStateData.fixedCharitiesTotal,
+    extraToGive: monthStateData.extraToGive,
+    fixedCharitiesSnapshot: monthStateData.fixedCharitiesSnapshot as any,
+  };
+
+  // If resetIsPaid option is true, reset isPaid to false
+  if (options?.resetIsPaid) {
+    updateData.isPaid = false;
+    updateData.paidAt = null;
+  }
+
   await prisma.monthState.upsert({
     where: {
       userId_month: { userId, month },
     },
-    update: {
-      totalMaaser: monthStateData.totalMaaser,
-      fixedCharitiesTotal: monthStateData.fixedCharitiesTotal,
-      extraToGive: monthStateData.extraToGive,
-      fixedCharitiesSnapshot: monthStateData.fixedCharitiesSnapshot as any,
-    },
+    update: updateData,
     create: {
       userId,
       month,
@@ -94,6 +107,15 @@ export async function POST(request: Request) {
     const month = getCurrentMonth();
     const maaser = Math.round(amount * (percentage / 100));
 
+    // Check if month was already marked as paid BEFORE adding income
+    const existingMonthState = await prisma.monthState.findUnique({
+      where: {
+        userId_month: { userId: session.user.id, month },
+      },
+    });
+
+    const wasAlreadyPaid = existingMonthState?.isPaid || false;
+
     // Create income
     const income = await prisma.income.create({
       data: {
@@ -106,8 +128,10 @@ export async function POST(request: Request) {
       },
     });
 
-    // Recalculate month state
-    await recalculateMonthState(session.user.id, month);
+    // Recalculate month state, resetting isPaid if month was already paid
+    await recalculateMonthState(session.user.id, month, {
+      resetIsPaid: wasAlreadyPaid,
+    });
 
     return NextResponse.json({ income }, { status: 201 });
   } catch (error) {
@@ -132,13 +156,21 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: 'ID is required' }, { status: 400 });
     }
 
-    // Get the income to know which month to recalculate
+    // Get the income to check if it's frozen
     const existingIncome = await prisma.income.findFirst({
       where: { id, userId: session.user.id },
     });
 
     if (!existingIncome) {
       return NextResponse.json({ error: 'Income not found' }, { status: 404 });
+    }
+
+    // Check if the income is frozen (existed before month was marked as paid)
+    if (existingIncome.isFrozen) {
+      return NextResponse.json(
+        { error: 'errors.cannotEditFrozenIncome' },
+        { status: 403 }
+      );
     }
 
     // Calculate new maaser if amount or percentage changed
@@ -184,13 +216,21 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: 'ID is required' }, { status: 400 });
     }
 
-    // Get the income to know which month to recalculate
+    // Get the income to check if it's frozen
     const income = await prisma.income.findFirst({
       where: { id, userId: session.user.id },
     });
 
     if (!income) {
       return NextResponse.json({ error: 'Income not found' }, { status: 404 });
+    }
+
+    // Check if the income is frozen (existed before month was marked as paid)
+    if (income.isFrozen) {
+      return NextResponse.json(
+        { error: 'errors.cannotDeleteFrozenIncome' },
+        { status: 403 }
+      );
     }
 
     const month = income.month;
