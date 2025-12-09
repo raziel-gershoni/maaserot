@@ -51,7 +51,12 @@
     "noIncomeThisMonth": "No income recorded this month",
     "addFirstIncome": "Add Your First Income",
     "maaser": "Maaser",
-    "income": "Income"
+    "income": "Income",
+    "personalView": "My View",
+    "groupView": "Group View",
+    "groupSummary": "Group Summary",
+    "partnerBreakdown": "Partner Breakdown",
+    "markGroupAsPaid": "Mark Group as Paid"
   },
   "income": {
     "title": "Income",
@@ -172,6 +177,7 @@
     "totalMaaser": "Total Maaser",
     "totalFixedCharities": "Total Fixed Charities",
     "unpaid": "Unpaid",
-    "totalUnpaid": "Total Unpaid"
+    "totalUnpaid": "Total Unpaid",
+    "viewGroupDashboard": "View Group Dashboard"
   }
 }

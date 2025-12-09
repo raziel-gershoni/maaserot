@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
-import { formatCurrency } from '@/lib/calculations';
 
 interface SharedAccess {
   id: string;
@@ -15,13 +14,8 @@ interface SharedAccess {
     email: string;
   };
   canEdit: boolean;
+  isSelected?: boolean;
   createdAt: string;
-}
-
-interface CombinedSummary {
-  totalMaaser: number;
-  totalFixedCharities: number;
-  unpaid: number;
 }
 
 export default function SharedPage() {
@@ -33,8 +27,6 @@ export default function SharedPage() {
 
   const [sharingWith, setSharingWith] = useState<SharedAccess[]>([]);
   const [sharedWithMe, setSharedWithMe] = useState<SharedAccess[]>([]);
-  const [combinedSummary, setCombinedSummary] = useState<CombinedSummary | null>(null);
-  const [showCombined, setShowCombined] = useState(false);
   const [locale, setLocale] = useState('he');
 
   const t = useTranslations('shared');
@@ -67,19 +59,6 @@ export default function SharedPage() {
       }
     } catch (error) {
       console.error('Failed to fetch shared access:', error);
-    }
-  };
-
-  const fetchCombinedSummary = async () => {
-    try {
-      const response = await fetch('/api/shared/summary');
-      if (response.ok) {
-        const data = await response.json();
-        setCombinedSummary(data);
-        setShowCombined(true);
-      }
-    } catch (error) {
-      console.error('Failed to fetch combined summary:', error);
     }
   };
 
@@ -130,6 +109,29 @@ export default function SharedPage() {
       console.error('Failed to revoke access:', error);
     }
   };
+
+  const handleToggleSelection = async (shareId: string, currentValue: boolean) => {
+    try {
+      const response = await fetch('/api/shared', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: shareId, isSelected: !currentValue }),
+      });
+
+      if (response.ok) {
+        // Optimistic update
+        setSharedWithMe((prev) =>
+          prev.map((share) =>
+            share.id === shareId ? { ...share, isSelected: !currentValue } : share
+          )
+        );
+      }
+    } catch (error) {
+      console.error('Failed to toggle selection:', error);
+    }
+  };
+
+  const selectedCount = sharedWithMe.filter((share) => share.isSelected).length;
 
   return (
     <div className="p-4 md:p-8">
@@ -195,48 +197,6 @@ export default function SharedPage() {
           </form>
         </div>
 
-        {/* Combined Summary */}
-        {sharedWithMe.length > 0 && (
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 md:p-8 mb-6 border border-gray-200 dark:border-gray-700">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl md:text-2xl font-bold text-gray-900 dark:text-white">{t('combinedSummary')}</h2>
-              <button
-                onClick={() => showCombined ? setShowCombined(false) : fetchCombinedSummary()}
-                className="px-4 py-2 bg-purple-600 hover:bg-purple-700 dark:bg-purple-700 dark:hover:bg-purple-600 text-white rounded-lg font-medium text-sm transition"
-              >
-                {showCombined ? t('hide') : t('show')}
-              </button>
-            </div>
-
-            {showCombined && combinedSummary && (
-              <div className="space-y-4">
-                <div className="flex justify-between items-center p-4 bg-gray-50 dark:bg-gray-900 rounded-lg">
-                  <p className="font-semibold text-gray-900 dark:text-white">{t('totalMaaser')}</p>
-                  <p className="text-lg font-bold text-gray-900 dark:text-white">
-                    {formatCurrency(combinedSummary.totalMaaser, locale)}
-                  </p>
-                </div>
-
-                <div className="flex justify-between items-center p-4 bg-gray-50 dark:bg-gray-900 rounded-lg">
-                  <p className="font-semibold text-gray-900 dark:text-white">{t('totalFixedCharities')}</p>
-                  <p className="text-lg font-bold text-gray-900 dark:text-white">
-                    {formatCurrency(combinedSummary.totalFixedCharities, locale)}
-                  </p>
-                </div>
-
-                <div className="border-t-2 border-gray-300 dark:border-gray-600 pt-4 mt-4">
-                  <div className="flex justify-between items-center p-4 bg-indigo-50 dark:bg-indigo-900/30 rounded-lg border border-indigo-200 dark:border-indigo-700">
-                    <p className="text-lg font-bold text-gray-900 dark:text-white">{t('unpaid')}</p>
-                    <p className="text-2xl font-bold text-indigo-900 dark:text-indigo-100">
-                      {formatCurrency(combinedSummary.unpaid, locale)}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
         {/* People you're sharing with */}
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 md:p-8 mb-6 border border-gray-200 dark:border-gray-700">
           <h2 className="text-xl md:text-2xl font-bold text-gray-900 dark:text-white mb-6">{t('sharingWith')}</h2>
@@ -274,26 +234,37 @@ export default function SharedPage() {
           {sharedWithMe.length === 0 ? (
             <p className="text-gray-600 dark:text-gray-400">{t('noOneSharing')}</p>
           ) : (
-            <div className="space-y-3">
-              {sharedWithMe.map((share) => (
-                <div key={share.id} className="flex justify-between items-center p-4 bg-gray-50 dark:bg-gray-900 rounded-lg">
-                  <div>
-                    <p className="font-semibold text-gray-900 dark:text-white">
-                      {share.owner.name || share.owner.email}
-                    </p>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
-                      {share.canEdit ? t('canEdit') : t('viewOnly')}
-                    </p>
+            <>
+              <div className="space-y-3 mb-6">
+                {sharedWithMe.map((share) => (
+                  <div key={share.id} className="flex items-center gap-4 p-4 bg-gray-50 dark:bg-gray-900 rounded-lg">
+                    <input
+                      type="checkbox"
+                      checked={share.isSelected !== false}
+                      onChange={() => handleToggleSelection(share.id, share.isSelected !== false)}
+                      className="w-5 h-5 rounded border-gray-400 dark:border-gray-600 text-indigo-600 focus:ring-indigo-500"
+                    />
+                    <div className="flex-1">
+                      <p className="font-semibold text-gray-900 dark:text-white">
+                        {share.owner.name || share.owner.email}
+                      </p>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                        {share.canEdit ? t('canEdit') : t('viewOnly')}
+                      </p>
+                    </div>
                   </div>
-                  <a
-                    href={`/shared/${share.owner.email}`}
-                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium text-sm transition"
-                  >
-                    {t('view')}
-                  </a>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+
+              {selectedCount > 0 && (
+                <a
+                  href="/dashboard?view=group"
+                  className="block w-full py-3 bg-purple-600 hover:bg-purple-700 dark:bg-purple-700 dark:hover:bg-purple-600 text-white text-center rounded-lg font-semibold transition"
+                >
+                  {t('viewGroupDashboard')} ({selectedCount})
+                </a>
+              )}
+            </>
           )}
         </div>
       </div>

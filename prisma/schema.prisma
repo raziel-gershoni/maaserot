@@ -78,13 +78,14 @@ model MonthState {
 }
 
 model SharedAccess {
-  id        String   @id @default(cuid())
-  ownerId   String
-  owner     User     @relation("owner", fields: [ownerId], references: [id], onDelete: Cascade)
-  viewerId  String
-  viewer    User     @relation("viewer", fields: [viewerId], references: [id], onDelete: Cascade)
-  canEdit   Boolean  @default(false)
-  createdAt DateTime @default(now())
+  id         String   @id @default(cuid())
+  ownerId    String
+  owner      User     @relation("owner", fields: [ownerId], references: [id], onDelete: Cascade)
+  viewerId   String
+  viewer     User     @relation("viewer", fields: [viewerId], references: [id], onDelete: Cascade)
+  canEdit    Boolean  @default(false)
+  isSelected Boolean  @default(true)
+  createdAt  DateTime @default(now())
 
   @@unique([ownerId, viewerId])
   @@index([ownerId])

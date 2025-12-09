@@ -51,7 +51,12 @@
     "noIncomeThisMonth": "לא נרשמו הכנסות החודש",
     "addFirstIncome": "הוסף את ההכנסה הראשונה שלך",
     "maaser": "מעשר",
-    "income": "הכנסה"
+    "income": "הכנסה",
+    "personalView": "התצוגה שלי",
+    "groupView": "תצוגת קבוצה",
+    "groupSummary": "סיכום קבוצתי",
+    "partnerBreakdown": "פירוט שותפים",
+    "markGroupAsPaid": "סמן קבוצה כשולם"
   },
   "income": {
     "title": "הכנסות",
@@ -172,6 +177,7 @@
     "totalMaaser": "סה\"כ מעשר",
     "totalFixedCharities": "סה\"כ תרומות קבועות",
     "unpaid": "לא שולם",
-    "totalUnpaid": "סה\"כ לא שולם"
+    "totalUnpaid": "סה\"כ לא שולם",
+    "viewGroupDashboard": "צפה בלוח קבוצתי"
   }
 }

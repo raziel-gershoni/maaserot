@@ -103,6 +103,45 @@ export async function POST(request: Request) {
   }
 }
 
+export async function PATCH(request: Request) {
+  try {
+    const session = await auth();
+
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const { id, isSelected } = await request.json();
+
+    if (!id || isSelected === undefined) {
+      return NextResponse.json({ error: 'ID and isSelected are required' }, { status: 400 });
+    }
+
+    // Verify user is the viewer (can only toggle selection for shares where they're the viewer)
+    const sharedAccess = await prisma.sharedAccess.findFirst({
+      where: {
+        id,
+        viewerId: session.user.id,
+      },
+    });
+
+    if (!sharedAccess) {
+      return NextResponse.json({ error: 'Shared access not found' }, { status: 404 });
+    }
+
+    // Update isSelected
+    const updated = await prisma.sharedAccess.update({
+      where: { id },
+      data: { isSelected },
+    });
+
+    return NextResponse.json({ sharedAccess: updated });
+  } catch (error) {
+    console.error('Share update error:', error);
+    return NextResponse.json({ error: 'Failed to update share' }, { status: 500 });
+  }
+}
+
 export async function DELETE(request: Request) {
   try {
     const session = await auth();

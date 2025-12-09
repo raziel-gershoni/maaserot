@@ -5,8 +5,13 @@ import { getCurrentMonth, formatCurrency } from '@/lib/calculations';
 import { getTranslations } from 'next-intl/server';
 import { Link } from '@/i18n/routing';
 import MarkAsPaidButton from '@/components/MarkAsPaidButton';
+import GroupMarkAsPaidButton from '@/components/GroupMarkAsPaidButton';
 
-export default async function DashboardPage() {
+interface PageProps {
+  searchParams: { view?: string };
+}
+
+export default async function DashboardPage({ searchParams }: PageProps) {
   const session = await auth();
 
   if (!session?.user?.id) {
@@ -15,8 +20,102 @@ export default async function DashboardPage() {
 
   const t = await getTranslations('dashboard');
   const currentMonth = getCurrentMonth();
+  const viewMode = searchParams.view || 'personal';
 
-  // Fetch current month's data
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { locale: true, name: true },
+  });
+
+  const locale = user?.locale || 'he';
+
+  // Fetch group data if in group view mode
+  let groupData = null;
+  if (viewMode === 'group') {
+    // Get selected partners
+    const selectedShares = await prisma.sharedAccess.findMany({
+      where: {
+        viewerId: session.user.id,
+        isSelected: true,
+      },
+      include: {
+        owner: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+      },
+    });
+
+    const members = [];
+
+    // Get current user's data
+    const myMonthState = await prisma.monthState.findUnique({
+      where: {
+        userId_month: {
+          userId: session.user.id,
+          month: currentMonth,
+        },
+      },
+    });
+
+    members.push({
+      userId: session.user.id,
+      name: user?.name || '',
+      email: session.user.email || '',
+      monthState: myMonthState,
+    });
+
+    // Get selected partners' data
+    for (const share of selectedShares) {
+      const monthState = await prisma.monthState.findUnique({
+        where: {
+          userId_month: {
+            userId: share.owner.id,
+            month: currentMonth,
+          },
+        },
+      });
+
+      members.push({
+        userId: share.owner.id,
+        name: share.owner.name || '',
+        email: share.owner.email,
+        monthState,
+      });
+    }
+
+    // Calculate totals
+    let totalMaaser = 0;
+    let totalFixedCharities = 0;
+    let totalExtraToGive = 0;
+    let hasUnpaid = false;
+
+    for (const member of members) {
+      if (member.monthState) {
+        totalMaaser += member.monthState.totalMaaser;
+        totalFixedCharities += member.monthState.fixedCharitiesTotal;
+        totalExtraToGive += member.monthState.extraToGive;
+        if (!member.monthState.isPaid) {
+          hasUnpaid = true;
+        }
+      }
+    }
+
+    groupData = {
+      members,
+      totals: {
+        totalMaaser,
+        totalFixedCharities,
+        extraToGive: totalExtraToGive,
+        hasUnpaid,
+      },
+    };
+  }
+
+  // Fetch personal data
   const monthState = await prisma.monthState.findUnique({
     where: {
       userId_month: {
@@ -34,20 +133,41 @@ export default async function DashboardPage() {
     orderBy: { createdAt: 'desc' },
   });
 
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: { locale: true },
-  });
-
-  const locale = user?.locale || 'he';
-
   return (
     <div className="p-4 md:p-8">
       <div className="max-w-5xl mx-auto">
-        {/* Header */}
+        {/* Header with View Toggle */}
         <div className="mb-6 md:mb-8">
-          <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-900 dark:text-white mb-2">{t('title')}</h1>
-          <p className="text-sm sm:text-base text-gray-700 dark:text-gray-300">{t('subtitle')}</p>
+          <div className="flex justify-between items-start mb-4">
+            <div>
+              <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-900 dark:text-white mb-2">{t('title')}</h1>
+              <p className="text-sm sm:text-base text-gray-700 dark:text-gray-300">{t('subtitle')}</p>
+            </div>
+            {groupData && (
+              <div className="flex gap-2 bg-gray-200 dark:bg-gray-700 p-1 rounded-lg">
+                <Link
+                  href="/dashboard?view=personal"
+                  className={`px-4 py-2 rounded-md font-medium text-sm transition ${
+                    viewMode === 'personal'
+                      ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow'
+                      : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                  }`}
+                >
+                  {t('personalView')}
+                </Link>
+                <Link
+                  href="/dashboard?view=group"
+                  className={`px-4 py-2 rounded-md font-medium text-sm transition ${
+                    viewMode === 'group'
+                      ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow'
+                      : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                  }`}
+                >
+                  {t('groupView')}
+                </Link>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Quick Actions */}
@@ -63,50 +183,142 @@ export default async function DashboardPage() {
           </Link>
         </div>
 
-        {monthState ? (
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 md:p-8 mb-6 border border-gray-200 dark:border-gray-700">
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">{t('currentMonth')}</h2>
+        {viewMode === 'group' && groupData ? (
+          /* Group View */
+          <div className="space-y-6 mb-6">
+            {/* Combined Metrics */}
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 md:p-8 border border-gray-200 dark:border-gray-700">
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">{t('groupSummary')}</h2>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-              <div className="bg-blue-50 dark:bg-blue-900/30 rounded-lg p-5 border border-blue-200 dark:border-blue-700">
-                <p className="text-sm font-medium text-blue-800 dark:text-blue-200 mb-1">{t('totalMaaser')}</p>
-                <p className="text-3xl font-bold text-blue-900 dark:text-blue-100">
-                  {formatCurrency(monthState.totalMaaser, locale)}
-                </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                <div className="bg-blue-50 dark:bg-blue-900/30 rounded-lg p-5 border border-blue-200 dark:border-blue-700">
+                  <p className="text-sm font-medium text-blue-800 dark:text-blue-200 mb-1">{t('totalMaaser')}</p>
+                  <p className="text-3xl font-bold text-blue-900 dark:text-blue-100">
+                    {formatCurrency(groupData.totals.totalMaaser, locale)}
+                  </p>
+                </div>
+                <div className="bg-green-50 dark:bg-green-900/30 rounded-lg p-5 border border-green-200 dark:border-green-700">
+                  <p className="text-sm font-medium text-green-800 dark:text-green-200 mb-1">{t('fixedCharities')}</p>
+                  <p className="text-3xl font-bold text-green-900 dark:text-green-100">
+                    {formatCurrency(groupData.totals.totalFixedCharities, locale)}
+                  </p>
+                </div>
               </div>
-              <div className="bg-green-50 dark:bg-green-900/30 rounded-lg p-5 border border-green-200 dark:border-green-700">
-                <p className="text-sm font-medium text-green-800 dark:text-green-200 mb-1">{t('fixedCharities')}</p>
-                <p className="text-3xl font-bold text-green-900 dark:text-green-100">
-                  {formatCurrency(monthState.fixedCharitiesTotal, locale)}
+
+              <div className="bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-900/30 dark:to-purple-900/30 rounded-lg p-6 border-2 border-indigo-200 dark:border-indigo-700">
+                <p className="text-sm font-medium text-indigo-800 dark:text-indigo-200 mb-2">{t('extraToGive')}</p>
+                <p className="text-4xl font-bold text-indigo-900 dark:text-indigo-100 mb-4">
+                  {formatCurrency(groupData.totals.extraToGive, locale)}
                 </p>
+
+                {groupData.totals.hasUnpaid && groupData.totals.extraToGive > 0 && (
+                  <GroupMarkAsPaidButton month={currentMonth} label={t('markGroupAsPaid')} />
+                )}
               </div>
             </div>
 
-            <div className="bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-900/30 dark:to-purple-900/30 rounded-lg p-6 border-2 border-indigo-200 dark:border-indigo-700">
-              <p className="text-sm font-medium text-indigo-800 dark:text-indigo-200 mb-2">{t('extraToGive')}</p>
-              <p className="text-4xl font-bold text-indigo-900 dark:text-indigo-100 mb-4">
-                {formatCurrency(monthState.extraToGive, locale)}
-              </p>
-
-              <div className="flex items-center gap-3">
-                <span className={`inline-block px-4 py-2 rounded-lg text-sm font-bold ${
-                  monthState.isPaid
-                    ? 'bg-green-600 text-white dark:bg-green-700'
-                    : 'bg-yellow-500 text-gray-900 dark:bg-yellow-600 dark:text-gray-100'
-                }`}>
-                  {monthState.isPaid ? '✓ ' + t('paid') : '⏳ ' + t('unpaid')}
-                </span>
-                {!monthState.isPaid && monthState.extraToGive > 0 && (
-                  <MarkAsPaidButton month={currentMonth} label={t('markAsPaid')} />
-                )}
+            {/* Partner Breakdown */}
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 md:p-8 border border-gray-200 dark:border-gray-700">
+              <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">{t('partnerBreakdown')}</h3>
+              <div className="space-y-4">
+                {groupData.members.map((member: any) => (
+                  <div key={member.userId} className="p-4 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700">
+                    <div className="flex justify-between items-start mb-2">
+                      <div>
+                        <p className="font-semibold text-gray-900 dark:text-white">
+                          {member.name || member.email}
+                          {member.userId === session.user.id && <span className="text-sm text-gray-500 ml-2">(You)</span>}
+                        </p>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">{member.email}</p>
+                      </div>
+                      {member.monthState && (
+                        <span className={`px-3 py-1 rounded-lg text-xs font-bold ${
+                          member.monthState.isPaid
+                            ? 'bg-green-600 text-white'
+                            : 'bg-yellow-500 text-gray-900'
+                        }`}>
+                          {member.monthState.isPaid ? '✓ Paid' : '⏳ Unpaid'}
+                        </span>
+                      )}
+                    </div>
+                    {member.monthState ? (
+                      <div className="grid grid-cols-3 gap-4 mt-3">
+                        <div>
+                          <p className="text-xs text-gray-600 dark:text-gray-400">{t('totalMaaser')}</p>
+                          <p className="text-lg font-bold text-gray-900 dark:text-white">
+                            {formatCurrency(member.monthState.totalMaaser, locale)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-600 dark:text-gray-400">{t('fixedCharities')}</p>
+                          <p className="text-lg font-bold text-gray-900 dark:text-white">
+                            {formatCurrency(member.monthState.fixedCharitiesTotal, locale)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-600 dark:text-gray-400">{t('extraToGive')}</p>
+                          <p className="text-lg font-bold text-gray-900 dark:text-white">
+                            {formatCurrency(member.monthState.extraToGive, locale)}
+                          </p>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">No data for this month</p>
+                    )}
+                  </div>
+                ))}
               </div>
             </div>
           </div>
         ) : (
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-8 mb-6 border border-gray-200 dark:border-gray-700 text-center">
-            <p className="text-xl text-gray-700 dark:text-gray-300 mb-4">{t('nothingToPay')}</p>
-            <p className="text-gray-600 dark:text-gray-400">{t('addFirstIncome')}</p>
-          </div>
+          /* Personal View */
+          <>
+            {monthState ? (
+              <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 md:p-8 mb-6 border border-gray-200 dark:border-gray-700">
+                <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">{t('currentMonth')}</h2>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                  <div className="bg-blue-50 dark:bg-blue-900/30 rounded-lg p-5 border border-blue-200 dark:border-blue-700">
+                    <p className="text-sm font-medium text-blue-800 dark:text-blue-200 mb-1">{t('totalMaaser')}</p>
+                    <p className="text-3xl font-bold text-blue-900 dark:text-blue-100">
+                      {formatCurrency(monthState.totalMaaser, locale)}
+                    </p>
+                  </div>
+                  <div className="bg-green-50 dark:bg-green-900/30 rounded-lg p-5 border border-green-200 dark:border-green-700">
+                    <p className="text-sm font-medium text-green-800 dark:text-green-200 mb-1">{t('fixedCharities')}</p>
+                    <p className="text-3xl font-bold text-green-900 dark:text-green-100">
+                      {formatCurrency(monthState.fixedCharitiesTotal, locale)}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-900/30 dark:to-purple-900/30 rounded-lg p-6 border-2 border-indigo-200 dark:border-indigo-700">
+                  <p className="text-sm font-medium text-indigo-800 dark:text-indigo-200 mb-2">{t('extraToGive')}</p>
+                  <p className="text-4xl font-bold text-indigo-900 dark:text-indigo-100 mb-4">
+                    {formatCurrency(monthState.extraToGive, locale)}
+                  </p>
+
+                  <div className="flex items-center gap-3">
+                    <span className={`inline-block px-4 py-2 rounded-lg text-sm font-bold ${
+                      monthState.isPaid
+                        ? 'bg-green-600 text-white dark:bg-green-700'
+                        : 'bg-yellow-500 text-gray-900 dark:bg-yellow-600 dark:text-gray-100'
+                    }`}>
+                      {monthState.isPaid ? '✓ ' + t('paid') : '⏳ ' + t('unpaid')}
+                    </span>
+                    {!monthState.isPaid && monthState.extraToGive > 0 && (
+                      <MarkAsPaidButton month={currentMonth} label={t('markAsPaid')} />
+                    )}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-8 mb-6 border border-gray-200 dark:border-gray-700 text-center">
+                <p className="text-xl text-gray-700 dark:text-gray-300 mb-4">{t('nothingToPay')}</p>
+                <p className="text-gray-600 dark:text-gray-400">{t('addFirstIncome')}</p>
+              </div>
+            )}
+          </>
         )}
 
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 md:p-8 border border-gray-200 dark:border-gray-700">
