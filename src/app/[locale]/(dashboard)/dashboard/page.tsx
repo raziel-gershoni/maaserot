@@ -7,11 +7,7 @@ import { Link } from '@/i18n/routing';
 import MarkAsPaidButton from '@/components/MarkAsPaidButton';
 import GroupMarkAsPaidButton from '@/components/GroupMarkAsPaidButton';
 
-interface PageProps {
-  searchParams: { view?: string };
-}
-
-export default async function DashboardPage({ searchParams }: PageProps) {
+export default async function DashboardPage() {
   const session = await auth();
 
   if (!session?.user?.id) {
@@ -20,7 +16,6 @@ export default async function DashboardPage({ searchParams }: PageProps) {
 
   const t = await getTranslations('dashboard');
   const currentMonth = getCurrentMonth();
-  const viewMode = searchParams.view || 'personal';
 
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
@@ -29,26 +24,28 @@ export default async function DashboardPage({ searchParams }: PageProps) {
 
   const locale = user?.locale || 'he';
 
-  // Fetch group data if in group view mode
-  let groupData = null;
-  if (viewMode === 'group') {
-    // Get selected partners
-    const selectedShares = await prisma.sharedAccess.findMany({
-      where: {
-        viewerId: session.user.id,
-        isSelected: true,
-      },
-      include: {
-        owner: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-          },
+  // Check if user has selected partners for group view
+  const selectedShares = await prisma.sharedAccess.findMany({
+    where: {
+      viewerId: session.user.id,
+      isSelected: true,
+    },
+    include: {
+      owner: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
         },
       },
-    });
+    },
+  });
 
+  const hasSelectedPartners = selectedShares.length > 0;
+
+  // Fetch group data if there are selected partners
+  let groupData = null;
+  if (hasSelectedPartners) {
     const members = [];
 
     // Get current user's data
@@ -136,38 +133,10 @@ export default async function DashboardPage({ searchParams }: PageProps) {
   return (
     <div className="p-4 md:p-8">
       <div className="max-w-5xl mx-auto">
-        {/* Header with View Toggle */}
+        {/* Header */}
         <div className="mb-6 md:mb-8">
-          <div className="flex justify-between items-start mb-4">
-            <div>
-              <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-900 dark:text-white mb-2">{t('title')}</h1>
-              <p className="text-sm sm:text-base text-gray-700 dark:text-gray-300">{t('subtitle')}</p>
-            </div>
-            {groupData && (
-              <div className="flex gap-2 bg-gray-200 dark:bg-gray-700 p-1 rounded-lg">
-                <Link
-                  href="/dashboard?view=personal"
-                  className={`px-4 py-2 rounded-md font-medium text-sm transition ${
-                    viewMode === 'personal'
-                      ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow'
-                      : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
-                  }`}
-                >
-                  {t('personalView')}
-                </Link>
-                <Link
-                  href="/dashboard?view=group"
-                  className={`px-4 py-2 rounded-md font-medium text-sm transition ${
-                    viewMode === 'group'
-                      ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow'
-                      : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
-                  }`}
-                >
-                  {t('groupView')}
-                </Link>
-              </div>
-            )}
-          </div>
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-900 dark:text-white mb-2">{t('title')}</h1>
+          <p className="text-sm sm:text-base text-gray-700 dark:text-gray-300">{t('subtitle')}</p>
         </div>
 
         {/* Quick Actions */}
@@ -183,8 +152,8 @@ export default async function DashboardPage({ searchParams }: PageProps) {
           </Link>
         </div>
 
-        {viewMode === 'group' && groupData ? (
-          /* Group View */
+        {groupData ? (
+          /* Group View - Shown when partners are selected */
           <div className="space-y-6 mb-6">
             {/* Combined Metrics */}
             <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 md:p-8 border border-gray-200 dark:border-gray-700">
@@ -271,7 +240,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
             </div>
           </div>
         ) : (
-          /* Personal View */
+          /* Personal View - Shown when no partners selected */
           <>
             {monthState ? (
               <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 md:p-8 mb-6 border border-gray-200 dark:border-gray-700">

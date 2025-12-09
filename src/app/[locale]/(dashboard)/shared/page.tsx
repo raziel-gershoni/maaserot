@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
+import { Link } from '@/i18n/routing';
 
 interface SharedAccess {
   id: string;
@@ -257,12 +258,12 @@ export default function SharedPage() {
               </div>
 
               {selectedCount > 0 && (
-                <a
-                  href="/dashboard?view=group"
+                <Link
+                  href="/dashboard"
                   className="block w-full py-3 bg-purple-600 hover:bg-purple-700 dark:bg-purple-700 dark:hover:bg-purple-600 text-white text-center rounded-lg font-semibold transition"
                 >
                   {t('viewGroupDashboard')} ({selectedCount})
-                </a>
+                </Link>
               )}
             </>
           )}
