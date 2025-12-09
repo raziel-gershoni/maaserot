@@ -19,11 +19,11 @@ model User {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  fixedCharities FixedCharity[]
-  incomes        Income[]
-  monthStates    MonthState[]
-  sharedWith     SharedAccess[] @relation("owner")
-  sharedFrom     SharedAccess[] @relation("viewer")
+  fixedCharities    FixedCharity[]
+  incomes           Income[]
+  paymentSnapshots  PaymentSnapshot[]
+  sharedWith        SharedAccess[] @relation("owner")
+  sharedFrom        SharedAccess[] @relation("viewer")
 }
 
 model FixedCharity {
@@ -53,29 +53,29 @@ model Income {
   @@index([userId, month])
 }
 
-model MonthState {
-  id                     String    @id @default(cuid())
+model PaymentSnapshot {
+  id                     String   @id @default(cuid())
   userId                 String
-  user                   User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  month                  String    // "2024-01"
+  user                   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  month                  String   // "2024-12" format
 
-  // Snapshot at time of calculation
-  totalMaaser            Int
-  fixedCharitiesTotal    Int
-  extraToGive            Int       // max(0, totalMaaser - fixedCharities)
+  // When payment was made
+  paidAt                 DateTime @default(now())
 
-  // Status
-  isPaid                 Boolean   @default(false)
-  paidAt                 DateTime?
+  // Financial state at time of payment
+  totalMaaser            Int      // Total maaser at this moment
+  fixedCharitiesTotal    Int      // Fixed charities deducted (0 if not first)
+  extraToGive            Int      // Amount available before this payment
+  amountPaid             Int      // Amount user paid in THIS event
 
-  // Snapshot of fixed charities for history
-  fixedCharitiesSnapshot Json      // [{name, amount}]
+  // Snapshots for audit trail
+  incomeSnapshot         Json     // Array of {id, amount, percentage, maaser}
+  fixedCharitiesSnapshot Json     // Array of {name, amount}
 
-  createdAt              DateTime  @default(now())
-  updatedAt              DateTime  @updatedAt
+  createdAt              DateTime @default(now())
 
-  @@unique([userId, month])
-  @@index([userId])
+  @@index([userId, month])
+  @@index([userId, paidAt])
 }
 
 model SharedAccess {

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { getCurrentMonth } from '@/lib/calculations';
+import { calculateCurrentMonthState } from '@/lib/monthState';
 
 export async function GET() {
   try {
@@ -15,25 +16,13 @@ export async function GET() {
 
     let totalMaaser = 0;
     let totalFixedCharities = 0;
-    let hasUnpaid = false;
+    let totalUnpaid = 0;
 
     // Get my own month state
-    const myMonthState = await prisma.monthState.findUnique({
-      where: {
-        userId_month: {
-          userId: session.user.id,
-          month: currentMonth,
-        },
-      },
-    });
-
-    if (myMonthState) {
-      if (!myMonthState.isPaid) {
-        hasUnpaid = true;
-      }
-      totalMaaser += myMonthState.totalMaaser;
-      totalFixedCharities += myMonthState.fixedCharitiesTotal;
-    }
+    const myMonthState = await calculateCurrentMonthState(session.user.id, currentMonth);
+    totalMaaser += myMonthState.totalMaaser;
+    totalFixedCharities += myMonthState.fixedCharitiesTotal;
+    totalUnpaid += myMonthState.unpaid;
 
     // Get people sharing with me
     const sharedWithMe = await prisma.sharedAccess.findMany({
@@ -42,31 +31,16 @@ export async function GET() {
 
     // Get their month states and sum up
     for (const share of sharedWithMe) {
-      const monthState = await prisma.monthState.findUnique({
-        where: {
-          userId_month: {
-            userId: share.ownerId,
-            month: currentMonth,
-          },
-        },
-      });
-
-      if (monthState) {
-        if (!monthState.isPaid) {
-          hasUnpaid = true;
-        }
-        totalMaaser += monthState.totalMaaser;
-        totalFixedCharities += monthState.fixedCharitiesTotal;
-      }
+      const monthState = await calculateCurrentMonthState(share.ownerId, currentMonth);
+      totalMaaser += monthState.totalMaaser;
+      totalFixedCharities += monthState.fixedCharitiesTotal;
+      totalUnpaid += monthState.unpaid;
     }
-
-    // Calculate unpaid amount
-    const unpaid = hasUnpaid ? Math.max(0, totalMaaser - totalFixedCharities) : 0;
 
     return NextResponse.json({
       totalMaaser,
       totalFixedCharities,
-      unpaid,
+      unpaid: totalUnpaid,
     });
   } catch (error) {
     console.error('Combined summary error:', error);

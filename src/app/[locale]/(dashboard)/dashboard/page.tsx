@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { getCurrentMonth, formatCurrency } from '@/lib/calculations';
+import { calculateCurrentMonthState, calculateTotalAccumulatedUnpaid } from '@/lib/monthState';
 import { getTranslations } from 'next-intl/server';
 import { Link } from '@/i18n/routing';
 import MarkAsPaidButton from '@/components/MarkAsPaidButton';
@@ -49,14 +50,7 @@ export default async function DashboardPage() {
     const members = [];
 
     // Get current user's data
-    const myMonthState = await prisma.monthState.findUnique({
-      where: {
-        userId_month: {
-          userId: session.user.id,
-          month: currentMonth,
-        },
-      },
-    });
+    const myMonthState = await calculateCurrentMonthState(session.user.id, currentMonth);
 
     members.push({
       userId: session.user.id,
@@ -67,14 +61,7 @@ export default async function DashboardPage() {
 
     // Get selected partners' data
     for (const share of selectedShares) {
-      const monthState = await prisma.monthState.findUnique({
-        where: {
-          userId_month: {
-            userId: share.owner.id,
-            month: currentMonth,
-          },
-        },
-      });
+      const monthState = await calculateCurrentMonthState(share.owner.id, currentMonth);
 
       members.push({
         userId: share.owner.id,
@@ -88,17 +75,13 @@ export default async function DashboardPage() {
     let totalMaaser = 0;
     let totalFixedCharities = 0;
     let totalExtraToGive = 0;
-    let hasUnpaid = false;
+    let totalUnpaid = 0;
 
     for (const member of members) {
-      if (member.monthState) {
-        totalMaaser += member.monthState.totalMaaser;
-        totalFixedCharities += member.monthState.fixedCharitiesTotal;
-        totalExtraToGive += member.monthState.extraToGive;
-        if (!member.monthState.isPaid) {
-          hasUnpaid = true;
-        }
-      }
+      totalMaaser += member.monthState.totalMaaser;
+      totalFixedCharities += member.monthState.fixedCharitiesTotal;
+      totalExtraToGive += member.monthState.extraToGive;
+      totalUnpaid += member.monthState.unpaid;
     }
 
     groupData = {
@@ -107,20 +90,14 @@ export default async function DashboardPage() {
         totalMaaser,
         totalFixedCharities,
         extraToGive: totalExtraToGive,
-        hasUnpaid,
+        unpaid: totalUnpaid,
       },
     };
   }
 
   // Fetch personal data
-  const monthState = await prisma.monthState.findUnique({
-    where: {
-      userId_month: {
-        userId: session.user.id,
-        month: currentMonth,
-      },
-    },
-  });
+  const monthState = await calculateCurrentMonthState(session.user.id, currentMonth);
+  const totalAccumulatedUnpaid = await calculateTotalAccumulatedUnpaid(session.user.id, currentMonth);
 
   const incomes = await prisma.income.findMany({
     where: {
@@ -180,7 +157,7 @@ export default async function DashboardPage() {
                   {formatCurrency(groupData.totals.extraToGive, locale)}
                 </p>
 
-                {groupData.totals.hasUnpaid && groupData.totals.extraToGive > 0 && (
+                {groupData.totals.unpaid > 0 && (
                   <GroupMarkAsPaidButton month={currentMonth} label={t('markGroupAsPaid')} />
                 )}
               </div>
@@ -200,15 +177,13 @@ export default async function DashboardPage() {
                         </p>
                         <p className="text-sm text-gray-600 dark:text-gray-400">{member.email}</p>
                       </div>
-                      {member.monthState && (
-                        <span className={`px-3 py-1 rounded-lg text-xs font-bold ${
-                          member.monthState.isPaid
-                            ? 'bg-green-600 text-white'
-                            : 'bg-yellow-500 text-gray-900'
-                        }`}>
-                          {member.monthState.isPaid ? '✓ Paid' : '⏳ Unpaid'}
-                        </span>
-                      )}
+                      <span className={`px-3 py-1 rounded-lg text-xs font-bold ${
+                        member.monthState.unpaid === 0
+                          ? 'bg-green-600 text-white'
+                          : 'bg-yellow-500 text-gray-900'
+                      }`}>
+                        {member.monthState.unpaid === 0 ? '✓ Paid' : '⏳ Unpaid'}
+                      </span>
                     </div>
                     {member.monthState ? (
                       <div className="grid grid-cols-3 gap-4 mt-3">
@@ -242,7 +217,7 @@ export default async function DashboardPage() {
         ) : (
           /* Personal View - Shown when no partners selected */
           <>
-            {monthState ? (
+            {monthState.totalMaaser > 0 ? (
               <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 md:p-8 mb-6 border border-gray-200 dark:border-gray-700">
                 <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">{t('currentMonth')}</h2>
 
@@ -269,13 +244,13 @@ export default async function DashboardPage() {
 
                   <div className="flex items-center gap-3">
                     <span className={`inline-block px-4 py-2 rounded-lg text-sm font-bold ${
-                      monthState.isPaid
+                      monthState.unpaid === 0
                         ? 'bg-green-600 text-white dark:bg-green-700'
                         : 'bg-yellow-500 text-gray-900 dark:bg-yellow-600 dark:text-gray-100'
                     }`}>
-                      {monthState.isPaid ? '✓ ' + t('paid') : '⏳ ' + t('unpaid')}
+                      {monthState.unpaid === 0 ? '✓ ' + t('paid') : '⏳ ' + t('unpaid')}
                     </span>
-                    {!monthState.isPaid && monthState.extraToGive > 0 && (
+                    {monthState.unpaid > 0 && (
                       <MarkAsPaidButton month={currentMonth} label={t('markAsPaid')} />
                     )}
                   </div>

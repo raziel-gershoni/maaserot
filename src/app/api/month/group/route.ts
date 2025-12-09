@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { calculateCurrentMonthState } from '@/lib/monthState';
 
 export async function PATCH(request: Request) {
   try {
@@ -10,11 +11,11 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { month, isPaid } = await request.json();
+    const { month } = await request.json();
 
-    if (!month || isPaid === undefined) {
+    if (!month) {
       return NextResponse.json(
-        { error: 'Month and isPaid are required' },
+        { error: 'Month is required' },
         { status: 400 }
       );
     }
@@ -33,28 +34,66 @@ export async function PATCH(request: Request) {
     const partnerIds = selectedShares.map((share) => share.ownerId);
     const allUserIds = [session.user.id, ...partnerIds];
 
-    // Use transaction to update all month states
-    const results = await prisma.$transaction(
-      allUserIds.map((userId) =>
-        prisma.monthState.updateMany({
+    // Create payment snapshots for all users who have unpaid amounts
+    const snapshots = [];
+    for (const userId of allUserIds) {
+      const state = await calculateCurrentMonthState(userId, month);
+
+      if (state.unpaid > 0) {
+        // Get incomes for snapshot
+        const incomes = await prisma.income.findMany({
+          where: { userId, month },
+          select: { id: true, amount: true, percentage: true, maaser: true, description: true }
+        });
+
+        // Get fixed charities for snapshot
+        const fixedCharities = await prisma.fixedCharity.findMany({
+          where: { userId, isActive: true },
+          select: { name: true, amount: true }
+        });
+
+        // Determine if this is first payment (affects fixed charity deduction)
+        const isFirstPayment = state.snapshots.length === 0;
+        const fixedCharitiesTotal = isFirstPayment
+          ? fixedCharities.reduce((sum, c) => sum + c.amount, 0)
+          : 0;
+
+        // Create snapshot for full unpaid amount
+        const snapshot = await prisma.paymentSnapshot.create({
+          data: {
+            userId,
+            month,
+            totalMaaser: state.totalMaaser,
+            fixedCharitiesTotal,
+            extraToGive: state.extraToGive,
+            amountPaid: state.unpaid, // Pay full unpaid amount
+            incomeSnapshot: incomes,
+            fixedCharitiesSnapshot: fixedCharities,
+          }
+        });
+
+        // Freeze all current unfrozen incomes
+        await prisma.income.updateMany({
           where: {
             userId,
             month,
+            isFrozen: false
           },
           data: {
-            isPaid,
-            paidAt: isPaid ? new Date() : null,
-          },
-        })
-      )
-    );
+            isFrozen: true
+          }
+        });
+
+        snapshots.push(snapshot);
+      }
+    }
 
     return NextResponse.json({
       success: true,
-      updated: results.reduce((sum, r) => sum + r.count, 0)
+      created: snapshots.length
     });
   } catch (error) {
     console.error('Group payment error:', error);
-    return NextResponse.json({ error: 'Failed to update group payment status' }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to create group payment snapshots' }, { status: 500 });
   }
 }

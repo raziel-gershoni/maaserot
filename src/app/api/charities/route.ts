@@ -1,59 +1,6 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { calculateMonthState, getCurrentMonth } from '@/lib/calculations';
-
-// Helper function to recalculate current month state
-async function recalculateMonthState(userId: string) {
-  const month = getCurrentMonth();
-
-  const allIncomes = await prisma.income.findMany({
-    where: { userId, month },
-  });
-
-  const fixedCharities = await prisma.fixedCharity.findMany({
-    where: { userId, isActive: true },
-  });
-
-  const existingMonthState = await prisma.monthState.findUnique({
-    where: {
-      userId_month: {
-        userId,
-        month,
-      },
-    },
-  });
-
-  const monthStateData = calculateMonthState(
-    allIncomes.map((i) => ({ amount: i.amount, percentage: i.percentage })),
-    fixedCharities.map((c) => ({ name: c.name, amount: c.amount })),
-    existingMonthState?.isPaid || false
-  );
-
-  await prisma.monthState.upsert({
-    where: {
-      userId_month: {
-        userId,
-        month,
-      },
-    },
-    update: {
-      totalMaaser: monthStateData.totalMaaser,
-      fixedCharitiesTotal: monthStateData.fixedCharitiesTotal,
-      extraToGive: monthStateData.extraToGive,
-      fixedCharitiesSnapshot: monthStateData.fixedCharitiesSnapshot as any,
-    },
-    create: {
-      userId,
-      month,
-      totalMaaser: monthStateData.totalMaaser,
-      fixedCharitiesTotal: monthStateData.fixedCharitiesTotal,
-      extraToGive: monthStateData.extraToGive,
-      fixedCharitiesSnapshot: monthStateData.fixedCharitiesSnapshot as any,
-      isPaid: false,
-    },
-  });
-}
 
 export async function GET(request: Request) {
   try {
@@ -102,9 +49,6 @@ export async function POST(request: Request) {
       },
     });
 
-    // Recalculate month state after adding charity
-    await recalculateMonthState(session.user.id);
-
     return NextResponse.json({ charity }, { status: 201 });
   } catch (error) {
     console.error('Error creating charity:', error);
@@ -141,9 +85,6 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: 'Charity not found' }, { status: 404 });
     }
 
-    // Recalculate month state after updating charity
-    await recalculateMonthState(session.user.id);
-
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Error updating charity:', error);
@@ -171,9 +112,6 @@ export async function DELETE(request: Request) {
     await prisma.fixedCharity.deleteMany({
       where: { id, userId: session.user.id },
     });
-
-    // Recalculate month state after deleting charity
-    await recalculateMonthState(session.user.id);
 
     return NextResponse.json({ success: true });
   } catch (error) {

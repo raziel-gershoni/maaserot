@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { formatCurrency } from '@/lib/calculations';
+import { calculateCurrentMonthState } from '@/lib/monthState';
 import { getTranslations } from 'next-intl/server';
 
 export default async function HistoryPage() {
@@ -13,11 +14,33 @@ export default async function HistoryPage() {
 
   const t = await getTranslations('history');
 
-  // Fetch all month states for this user, ordered by month descending
-  const monthStates = await prisma.monthState.findMany({
+  // Get all distinct months that have incomes or snapshots
+  const incomeMonths = await prisma.income.findMany({
     where: { userId: session.user.id },
-    orderBy: { month: 'desc' },
+    select: { month: true },
+    distinct: ['month']
   });
+
+  const snapshotMonths = await prisma.paymentSnapshot.findMany({
+    where: { userId: session.user.id },
+    select: { month: true },
+    distinct: ['month']
+  });
+
+  // Combine and deduplicate months, then sort descending
+  const allMonthsSet = new Set<string>([
+    ...incomeMonths.map(i => i.month),
+    ...snapshotMonths.map(s => s.month)
+  ]);
+  const months = Array.from(allMonthsSet).sort().reverse();
+
+  // Calculate state for each month
+  const monthStates = await Promise.all(
+    months.map(async (month) => {
+      const state = await calculateCurrentMonthState(session.user.id, month);
+      return { month, ...state };
+    })
+  );
 
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
@@ -47,14 +70,19 @@ export default async function HistoryPage() {
           {monthStates.length > 0 ? (
             <div className="space-y-4">
               {monthStates.map((monthState) => {
-                const fixedCharities = monthState.fixedCharitiesSnapshot as Array<{
-                  name: string;
-                  amount: number;
-                }>;
+                // Get fixed charities from first snapshot, if any
+                const fixedCharities = monthState.snapshots.length > 0
+                  ? (monthState.snapshots[0].fixedCharitiesSnapshot as Array<{ name: string; amount: number; }>)
+                  : [];
+
+                // Get latest payment date
+                const latestSnapshot = monthState.snapshots.length > 0
+                  ? monthState.snapshots[monthState.snapshots.length - 1]
+                  : null;
 
                 return (
                   <div
-                    key={monthState.id}
+                    key={monthState.month}
                     className="border-2 border-gray-200 dark:border-gray-700 rounded-lg p-6 hover:border-indigo-300 dark:hover:border-indigo-600 transition bg-gray-50 dark:bg-gray-900"
                   >
                     {/* Month Header */}
@@ -65,17 +93,17 @@ export default async function HistoryPage() {
                         </h3>
                         <span
                           className={`inline-block mt-2 px-3 py-1 rounded-lg text-sm font-bold ${
-                            monthState.isPaid
+                            monthState.unpaid === 0
                               ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200'
                               : 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-200'
                           }`}
                         >
-                          {monthState.isPaid ? `✓ ${t('paid')}` : `⏳ ${t('unpaid')}`}
+                          {monthState.unpaid === 0 ? `✓ ${t('paid')}` : `⏳ ${t('unpaid')}`}
                         </span>
                       </div>
-                      {monthState.paidAt && (
+                      {latestSnapshot && (
                         <p className="text-sm text-gray-600 dark:text-gray-400">
-                          {t('paidOn')} {new Date(monthState.paidAt).toLocaleDateString(locale)}
+                          {t('paidOn')} {new Date(latestSnapshot.paidAt).toLocaleDateString(locale)}
                         </p>
                       )}
                     </div>

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { getCurrentMonth } from '@/lib/calculations';
+import { calculateCurrentMonthState } from '@/lib/monthState';
 
 export async function GET() {
   try {
@@ -37,14 +38,7 @@ export async function GET() {
       select: { id: true, name: true, email: true },
     });
 
-    const myMonthState = await prisma.monthState.findUnique({
-      where: {
-        userId_month: {
-          userId: session.user.id,
-          month: currentMonth,
-        },
-      },
-    });
+    const myMonthState = await calculateCurrentMonthState(session.user.id, currentMonth);
 
     // Add current user to members
     if (currentUser) {
@@ -52,40 +46,29 @@ export async function GET() {
         userId: currentUser.id,
         name: currentUser.name || '',
         email: currentUser.email,
-        monthState: myMonthState
-          ? {
-              totalMaaser: myMonthState.totalMaaser,
-              fixedCharitiesTotal: myMonthState.fixedCharitiesTotal,
-              extraToGive: myMonthState.extraToGive,
-              isPaid: myMonthState.isPaid,
-            }
-          : null,
+        monthState: {
+          totalMaaser: myMonthState.totalMaaser,
+          fixedCharitiesTotal: myMonthState.fixedCharitiesTotal,
+          extraToGive: myMonthState.extraToGive,
+          unpaid: myMonthState.unpaid,
+        },
       });
     }
 
     // Add selected partners to members
     for (const share of selectedShares) {
-      const monthState = await prisma.monthState.findUnique({
-        where: {
-          userId_month: {
-            userId: share.owner.id,
-            month: currentMonth,
-          },
-        },
-      });
+      const monthState = await calculateCurrentMonthState(share.owner.id, currentMonth);
 
       members.push({
         userId: share.owner.id,
         name: share.owner.name || '',
         email: share.owner.email,
-        monthState: monthState
-          ? {
-              totalMaaser: monthState.totalMaaser,
-              fixedCharitiesTotal: monthState.fixedCharitiesTotal,
-              extraToGive: monthState.extraToGive,
-              isPaid: monthState.isPaid,
-            }
-          : null,
+        monthState: {
+          totalMaaser: monthState.totalMaaser,
+          fixedCharitiesTotal: monthState.fixedCharitiesTotal,
+          extraToGive: monthState.extraToGive,
+          unpaid: monthState.unpaid,
+        },
       });
     }
 
@@ -93,17 +76,13 @@ export async function GET() {
     let totalMaaser = 0;
     let totalFixedCharities = 0;
     let totalExtraToGive = 0;
-    let hasUnpaid = false;
+    let totalUnpaid = 0;
 
     for (const member of members) {
-      if (member.monthState) {
-        totalMaaser += member.monthState.totalMaaser;
-        totalFixedCharities += member.monthState.fixedCharitiesTotal;
-        totalExtraToGive += member.monthState.extraToGive;
-        if (!member.monthState.isPaid) {
-          hasUnpaid = true;
-        }
-      }
+      totalMaaser += member.monthState.totalMaaser;
+      totalFixedCharities += member.monthState.fixedCharitiesTotal;
+      totalExtraToGive += member.monthState.extraToGive;
+      totalUnpaid += member.monthState.unpaid;
     }
 
     return NextResponse.json({
@@ -112,7 +91,7 @@ export async function GET() {
         totalMaaser,
         totalFixedCharities,
         extraToGive: totalExtraToGive,
-        hasUnpaid,
+        unpaid: totalUnpaid,
       },
     });
   } catch (error) {

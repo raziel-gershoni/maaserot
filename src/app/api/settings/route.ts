@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { getCurrentMonth, calculateMonthState } from '@/lib/calculations';
+import { getCurrentMonth } from '@/lib/calculations';
 
 export async function GET() {
   try {
@@ -81,77 +81,30 @@ export async function PATCH(request: Request) {
       },
     });
 
-    // If default percentage changed, recalculate current month's unpaid incomes
+    // If default percentage changed, update current month's unfrozen incomes
     if (defaultPercent !== undefined) {
       const currentMonth = getCurrentMonth();
 
-      // Check if current month has been marked as paid
-      const monthState = await prisma.monthState.findUnique({
+      // Get all unfrozen incomes for current month
+      const currentMonthIncomes = await prisma.income.findMany({
         where: {
-          userId_month: { userId: session.user.id, month: currentMonth },
+          userId: session.user.id,
+          month: currentMonth,
+          isFrozen: false, // Only update unfrozen incomes
         },
       });
 
-      // Only update if month hasn't been paid yet
-      if (!monthState || !monthState.isPaid) {
-        // Get all incomes for current month
-        const currentMonthIncomes = await prisma.income.findMany({
-          where: {
-            userId: session.user.id,
-            month: currentMonth,
+      // Update each income with new percentage and recalculated maaser
+      const newDefaultPercent = parseInt(defaultPercent);
+      for (const income of currentMonthIncomes) {
+        const newMaaser = Math.round(income.amount * (newDefaultPercent / 100));
+        await prisma.income.update({
+          where: { id: income.id },
+          data: {
+            percentage: newDefaultPercent,
+            maaser: newMaaser,
           },
         });
-
-        // Update each income with new percentage and recalculated maaser
-        const newDefaultPercent = parseInt(defaultPercent);
-        for (const income of currentMonthIncomes) {
-          const newMaaser = Math.round(income.amount * (newDefaultPercent / 100));
-          await prisma.income.update({
-            where: { id: income.id },
-            data: {
-              percentage: newDefaultPercent,
-              maaser: newMaaser,
-            },
-          });
-        }
-
-        // Recalculate month state if there are incomes
-        if (currentMonthIncomes.length > 0) {
-          const updatedIncomes = await prisma.income.findMany({
-            where: { userId: session.user.id, month: currentMonth },
-          });
-
-          const fixedCharities = await prisma.fixedCharity.findMany({
-            where: { userId: session.user.id, isActive: true },
-          });
-
-          const monthStateData = calculateMonthState(
-            updatedIncomes.map((i) => ({ amount: i.amount, percentage: i.percentage })),
-            fixedCharities.map((c) => ({ name: c.name, amount: c.amount })),
-            monthState?.isPaid || false
-          );
-
-          await prisma.monthState.upsert({
-            where: {
-              userId_month: { userId: session.user.id, month: currentMonth },
-            },
-            update: {
-              totalMaaser: monthStateData.totalMaaser,
-              fixedCharitiesTotal: monthStateData.fixedCharitiesTotal,
-              extraToGive: monthStateData.extraToGive,
-              fixedCharitiesSnapshot: monthStateData.fixedCharitiesSnapshot as any,
-            },
-            create: {
-              userId: session.user.id,
-              month: currentMonth,
-              totalMaaser: monthStateData.totalMaaser,
-              fixedCharitiesTotal: monthStateData.fixedCharitiesTotal,
-              extraToGive: monthStateData.extraToGive,
-              fixedCharitiesSnapshot: monthStateData.fixedCharitiesSnapshot as any,
-              isPaid: false,
-            },
-          });
-        }
       }
     }
 

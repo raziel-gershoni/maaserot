@@ -1,64 +1,7 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { calculateMonthState, getCurrentMonth } from '@/lib/calculations';
-
-// Helper function to recalculate month state after income changes
-async function recalculateMonthState(
-  userId: string,
-  month: string,
-  options?: { resetIsPaid?: boolean }
-) {
-  const allIncomes = await prisma.income.findMany({
-    where: { userId, month },
-  });
-
-  const fixedCharities = await prisma.fixedCharity.findMany({
-    where: { userId, isActive: true },
-  });
-
-  const existingMonthState = await prisma.monthState.findUnique({
-    where: {
-      userId_month: { userId, month },
-    },
-  });
-
-  const monthStateData = calculateMonthState(
-    allIncomes.map((i) => ({ amount: i.amount, percentage: i.percentage })),
-    fixedCharities.map((c) => ({ name: c.name, amount: c.amount })),
-    existingMonthState?.isPaid || false
-  );
-
-  // Build update data
-  const updateData: any = {
-    totalMaaser: monthStateData.totalMaaser,
-    fixedCharitiesTotal: monthStateData.fixedCharitiesTotal,
-    extraToGive: monthStateData.extraToGive,
-    fixedCharitiesSnapshot: monthStateData.fixedCharitiesSnapshot as any,
-  };
-
-  // If resetIsPaid option is true, reset isPaid to false
-  if (options?.resetIsPaid) {
-    updateData.isPaid = false;
-    updateData.paidAt = null;
-  }
-
-  await prisma.monthState.upsert({
-    where: {
-      userId_month: { userId, month },
-    },
-    update: updateData,
-    create: {
-      userId,
-      month,
-      totalMaaser: monthStateData.totalMaaser,
-      fixedCharitiesTotal: monthStateData.fixedCharitiesTotal,
-      extraToGive: monthStateData.extraToGive,
-      fixedCharitiesSnapshot: monthStateData.fixedCharitiesSnapshot as any,
-      isPaid: false,
-    },
-  });
-}
+import { getCurrentMonth } from '@/lib/calculations';
 
 export async function GET(request: Request) {
   try {
@@ -107,15 +50,6 @@ export async function POST(request: Request) {
     const month = getCurrentMonth();
     const maaser = Math.round(amount * (percentage / 100));
 
-    // Check if month was already marked as paid BEFORE adding income
-    const existingMonthState = await prisma.monthState.findUnique({
-      where: {
-        userId_month: { userId: session.user.id, month },
-      },
-    });
-
-    const wasAlreadyPaid = existingMonthState?.isPaid || false;
-
     // Create income
     const income = await prisma.income.create({
       data: {
@@ -126,11 +60,6 @@ export async function POST(request: Request) {
         maaser,
         description,
       },
-    });
-
-    // Recalculate month state, resetting isPaid if month was already paid
-    await recalculateMonthState(session.user.id, month, {
-      resetIsPaid: wasAlreadyPaid,
     });
 
     return NextResponse.json({ income }, { status: 201 });
@@ -189,9 +118,6 @@ export async function PATCH(request: Request) {
       },
     });
 
-    // Recalculate month state
-    await recalculateMonthState(session.user.id, existingIncome.month);
-
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Error updating income:', error);
@@ -233,15 +159,10 @@ export async function DELETE(request: Request) {
       );
     }
 
-    const month = income.month;
-
     // Delete income
     await prisma.income.delete({
       where: { id },
     });
-
-    // Recalculate month state
-    await recalculateMonthState(session.user.id, month);
 
     return NextResponse.json({ success: true });
   } catch (error) {
