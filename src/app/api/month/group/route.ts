@@ -34,58 +34,56 @@ export async function PATCH(request: Request) {
     const partnerIds = selectedShares.map((share) => share.ownerId);
     const allUserIds = [session.user.id, ...partnerIds];
 
-    // Create payment snapshots for all users who have unpaid amounts
+    // Create payment snapshots for ALL group members (even if individually unpaid = 0)
     const snapshots = [];
     for (const userId of allUserIds) {
       const state = await calculateCurrentMonthState(userId, month);
 
-      if (state.unpaid > 0) {
-        // Get incomes for snapshot
-        const incomes = await prisma.income.findMany({
-          where: { userId, month },
-          select: { id: true, amount: true, percentage: true, maaser: true, description: true }
-        });
+      // Get incomes for snapshot
+      const incomes = await prisma.income.findMany({
+        where: { userId, month },
+        select: { id: true, amount: true, percentage: true, maaser: true, description: true }
+      });
 
-        // Get fixed charities for snapshot
-        const fixedCharities = await prisma.fixedCharity.findMany({
-          where: { userId, isActive: true },
-          select: { name: true, amount: true }
-        });
+      // Get fixed charities for snapshot
+      const fixedCharities = await prisma.fixedCharity.findMany({
+        where: { userId, isActive: true },
+        select: { name: true, amount: true }
+      });
 
-        // Determine if this is first payment (affects fixed charity deduction)
-        const isFirstPayment = state.snapshots.length === 0;
-        const fixedCharitiesTotal = isFirstPayment
-          ? fixedCharities.reduce((sum, c) => sum + c.amount, 0)
-          : 0;
+      // Determine if this is first payment (affects fixed charity deduction)
+      const isFirstPayment = state.snapshots.length === 0;
+      const fixedCharitiesTotal = isFirstPayment
+        ? fixedCharities.reduce((sum, c) => sum + c.amount, 0)
+        : 0;
 
-        // Create snapshot for full unpaid amount
-        const snapshot = await prisma.paymentSnapshot.create({
-          data: {
-            userId,
-            month,
-            totalMaaser: state.totalMaaser,
-            fixedCharitiesTotal,
-            extraToGive: state.extraToGive,
-            amountPaid: state.unpaid, // Pay full unpaid amount
-            incomeSnapshot: incomes,
-            fixedCharitiesSnapshot: fixedCharities,
-          }
-        });
+      // Create snapshot for each member (amountPaid may be 0 for some members)
+      const snapshot = await prisma.paymentSnapshot.create({
+        data: {
+          userId,
+          month,
+          totalMaaser: state.totalMaaser,
+          fixedCharitiesTotal,
+          extraToGive: state.extraToGive,
+          amountPaid: state.unpaid, // Individual contribution (may be 0)
+          incomeSnapshot: incomes,
+          fixedCharitiesSnapshot: fixedCharities,
+        }
+      });
 
-        // Freeze all current unfrozen incomes
-        await prisma.income.updateMany({
-          where: {
-            userId,
-            month,
-            isFrozen: false
-          },
-          data: {
-            isFrozen: true
-          }
-        });
+      // Freeze all current unfrozen incomes for this member
+      await prisma.income.updateMany({
+        where: {
+          userId,
+          month,
+          isFrozen: false
+        },
+        data: {
+          isFrozen: true
+        }
+      });
 
-        snapshots.push(snapshot);
-      }
+      snapshots.push(snapshot);
     }
 
     return NextResponse.json({
