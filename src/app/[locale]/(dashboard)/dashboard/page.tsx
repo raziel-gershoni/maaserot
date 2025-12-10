@@ -178,11 +178,11 @@ export default async function DashboardPage() {
                         <p className="text-sm text-gray-600 dark:text-gray-400">{member.email}</p>
                       </div>
                       <span className={`px-3 py-1 rounded-lg text-xs font-bold ${
-                        member.monthState.unpaid === 0
+                        groupData.totals.unpaid === 0 && member.monthState.unpaid === 0
                           ? 'bg-green-600 text-white'
                           : 'bg-yellow-500 text-gray-900'
                       }`}>
-                        {member.monthState.unpaid === 0 ? '✓ Paid' : '⏳ Unpaid'}
+                        {groupData.totals.unpaid === 0 && member.monthState.unpaid === 0 ? '✓ Paid' : '⏳ Unpaid'}
                       </span>
                     </div>
                     {member.monthState ? (
