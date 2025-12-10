@@ -74,23 +74,27 @@ export default async function DashboardPage() {
     // Calculate totals
     let totalMaaser = 0;
     let totalFixedCharities = 0;
-    let totalExtraToGive = 0;
-    let totalUnpaid = 0;
+    let totalPaid = 0;
 
     for (const member of members) {
       totalMaaser += member.monthState.totalMaaser;
       totalFixedCharities += member.monthState.fixedCharitiesTotal;
-      totalExtraToGive += member.monthState.extraToGive;
-      totalUnpaid += member.monthState.unpaid;
+      totalPaid += member.monthState.totalPaid;
     }
+
+    // Calculate group-level extraToGive (not sum of individual extraToGive!)
+    const groupExtraToGive = Math.max(0, totalMaaser - totalFixedCharities);
+
+    // Calculate group-level unpaid
+    const groupUnpaid = Math.max(0, groupExtraToGive - totalPaid);
 
     groupData = {
       members,
       totals: {
         totalMaaser,
         totalFixedCharities,
-        extraToGive: totalExtraToGive,
-        unpaid: totalUnpaid,
+        extraToGive: groupExtraToGive,
+        unpaid: groupUnpaid,
       },
     };
   }
