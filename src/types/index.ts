@@ -6,7 +6,6 @@ export interface FixedCharityData {
 export interface MonthStateData {
   totalMaaser: number;
   fixedCharitiesTotal: number;
-  extraToGive: number;
   fixedCharitiesSnapshot: FixedCharityData[];
 }
 

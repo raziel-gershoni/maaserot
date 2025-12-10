@@ -26,16 +26,12 @@ export async function calculateCurrentMonthState(userId: string, month: string) 
   // Calculate total paid this month
   const totalPaid = snapshots.reduce((sum, s) => sum + s.amountPaid, 0);
 
-  // Extra to give this month
-  const extraToGive = Math.max(0, totalMaaser - fixedCharitiesTotal);
-
-  // Unpaid amount this month
-  const unpaid = Math.max(0, extraToGive - totalPaid);
+  // Unpaid amount this month (calculated directly)
+  const unpaid = Math.max(0, totalMaaser - fixedCharitiesTotal - totalPaid);
 
   return {
     totalMaaser,
     fixedCharitiesTotal,
-    extraToGive,
     totalPaid,
     unpaid,
     snapshots,

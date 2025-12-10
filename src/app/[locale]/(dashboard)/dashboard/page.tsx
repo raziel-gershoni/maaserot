@@ -99,9 +99,6 @@ export default async function DashboardPage() {
       }
     }
 
-    // Calculate group-level extraToGive (not sum of individual extraToGive!)
-    const groupExtraToGive = Math.max(0, totalMaaser - totalFixedCharities);
-
     // Calculate group-level paid amount
     // If ALL members have snapshots, use snapshot totals to calculate what was paid
     // Otherwise, use sum of individual payments
@@ -109,15 +106,14 @@ export default async function DashboardPage() {
       ? Math.max(0, snapshotTotalMaaser - snapshotTotalFixedCharities)
       : totalPaid;
 
-    // Calculate group-level unpaid
-    const groupUnpaid = Math.max(0, groupExtraToGive - groupPaid);
+    // Calculate group-level unpaid (directly, without extraToGive intermediate)
+    const groupUnpaid = Math.max(0, totalMaaser - totalFixedCharities - groupPaid);
 
     groupData = {
       members,
       totals: {
         totalMaaser,
         totalFixedCharities,
-        extraToGive: groupExtraToGive,
         unpaid: groupUnpaid,
       },
     };
@@ -180,14 +176,23 @@ export default async function DashboardPage() {
               </div>
 
               <div className="bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-900/30 dark:to-purple-900/30 rounded-lg p-6 border-2 border-indigo-200 dark:border-indigo-700">
-                <p className="text-sm font-medium text-indigo-800 dark:text-indigo-200 mb-2">{t('extraToGive')}</p>
+                <p className="text-sm font-medium text-indigo-800 dark:text-indigo-200 mb-2">{t('unpaid')}</p>
                 <p className="text-4xl font-bold text-indigo-900 dark:text-indigo-100 mb-4">
-                  {formatCurrency(groupData.totals.extraToGive, locale)}
+                  {formatCurrency(groupData.totals.unpaid, locale)}
                 </p>
 
-                {groupData.totals.unpaid > 0 && (
-                  <GroupMarkAsPaidButton month={currentMonth} label={t('markGroupAsPaid')} />
-                )}
+                <div className="flex items-center gap-3">
+                  <span className={`inline-block px-4 py-2 rounded-lg text-sm font-bold ${
+                    groupData.totals.unpaid === 0
+                      ? 'bg-green-600 text-white dark:bg-green-700'
+                      : 'bg-yellow-500 text-gray-900 dark:bg-yellow-600 dark:text-gray-100'
+                  }`}>
+                    {groupData.totals.unpaid === 0 ? '✓ ' + t('paid') : '⏳ ' + t('unpaid')}
+                  </span>
+                  {groupData.totals.unpaid > 0 && (
+                    <GroupMarkAsPaidButton month={currentMonth} label={t('markGroupAsPaid')} />
+                  )}
+                </div>
               </div>
             </div>
 
@@ -228,9 +233,9 @@ export default async function DashboardPage() {
                           </p>
                         </div>
                         <div>
-                          <p className="text-xs text-gray-600 dark:text-gray-400">{t('extraToGive')}</p>
+                          <p className="text-xs text-gray-600 dark:text-gray-400">{t('unpaid')}</p>
                           <p className="text-lg font-bold text-gray-900 dark:text-white">
-                            {formatCurrency(member.monthState.extraToGive, locale)}
+                            {formatCurrency(member.monthState.unpaid, locale)}
                           </p>
                         </div>
                       </div>
@@ -265,9 +270,9 @@ export default async function DashboardPage() {
                 </div>
 
                 <div className="bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-900/30 dark:to-purple-900/30 rounded-lg p-6 border-2 border-indigo-200 dark:border-indigo-700">
-                  <p className="text-sm font-medium text-indigo-800 dark:text-indigo-200 mb-2">{t('extraToGive')}</p>
+                  <p className="text-sm font-medium text-indigo-800 dark:text-indigo-200 mb-2">{t('unpaid')}</p>
                   <p className="text-4xl font-bold text-indigo-900 dark:text-indigo-100 mb-4">
-                    {formatCurrency(monthState.extraToGive, locale)}
+                    {formatCurrency(monthState.unpaid, locale)}
                   </p>
 
                   <div className="flex items-center gap-3">

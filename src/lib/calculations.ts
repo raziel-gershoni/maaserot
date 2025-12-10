@@ -15,12 +15,9 @@ export function calculateMonthState(
     ? 0
     : fixedCharities.reduce((sum, c) => sum + c.amount, 0);
 
-  const extraToGive = Math.max(0, totalMaaser - fixedCharitiesTotal);
-
   return {
     totalMaaser,
     fixedCharitiesTotal,
-    extraToGive,
     fixedCharitiesSnapshot: fixedCharities,
   };
 }

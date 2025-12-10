@@ -49,7 +49,6 @@ export async function GET() {
         monthState: {
           totalMaaser: myMonthState.totalMaaser,
           fixedCharitiesTotal: myMonthState.fixedCharitiesTotal,
-          extraToGive: myMonthState.extraToGive,
           unpaid: myMonthState.unpaid,
         },
       });
@@ -66,7 +65,6 @@ export async function GET() {
         monthState: {
           totalMaaser: monthState.totalMaaser,
           fixedCharitiesTotal: monthState.fixedCharitiesTotal,
-          extraToGive: monthState.extraToGive,
           unpaid: monthState.unpaid,
         },
       });
@@ -75,13 +73,11 @@ export async function GET() {
     // Calculate totals
     let totalMaaser = 0;
     let totalFixedCharities = 0;
-    let totalExtraToGive = 0;
     let totalUnpaid = 0;
 
     for (const member of members) {
       totalMaaser += member.monthState.totalMaaser;
       totalFixedCharities += member.monthState.fixedCharitiesTotal;
-      totalExtraToGive += member.monthState.extraToGive;
       totalUnpaid += member.monthState.unpaid;
     }
 
@@ -90,7 +86,6 @@ export async function GET() {
       totals: {
         totalMaaser,
         totalFixedCharities,
-        extraToGive: totalExtraToGive,
         unpaid: totalUnpaid,
       },
     });

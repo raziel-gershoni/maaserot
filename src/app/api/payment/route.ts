@@ -54,7 +54,6 @@ export async function POST(request: Request) {
         month,
         totalMaaser: state.totalMaaser,
         fixedCharitiesTotal,
-        extraToGive: state.extraToGive,
         amountPaid,
         incomeSnapshot: incomes,
         fixedCharitiesSnapshot: fixedCharities,

@@ -65,7 +65,6 @@ model PaymentSnapshot {
   // Financial state at time of payment
   totalMaaser            Int      // Total maaser at this moment
   fixedCharitiesTotal    Int      // Fixed charities deducted (0 if not first)
-  extraToGive            Int      // Amount available before this payment
   amountPaid             Int      // Amount user paid in THIS event
 
   // Snapshots for audit trail

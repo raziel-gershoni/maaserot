@@ -66,7 +66,6 @@ export async function PATCH(request: Request) {
           month,
           totalMaaser: state.totalMaaser,
           fixedCharitiesTotal,
-          extraToGive: state.extraToGive,
           amountPaid: state.unpaid, // Individual's own unpaid (may be 0)
           incomeSnapshot: incomes,
           fixedCharitiesSnapshot: fixedCharities,

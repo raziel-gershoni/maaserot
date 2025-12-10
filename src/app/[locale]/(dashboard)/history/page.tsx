@@ -123,9 +123,9 @@ export default async function HistoryPage() {
                         </p>
                       </div>
                       <div className="bg-indigo-50 dark:bg-indigo-900/30 rounded-lg p-4 border border-indigo-200 dark:border-indigo-700">
-                        <p className="text-xs font-medium text-indigo-800 dark:text-indigo-200 mb-1">{t('extraGiven')}</p>
+                        <p className="text-xs font-medium text-indigo-800 dark:text-indigo-200 mb-1">{t('totalPaid')}</p>
                         <p className="text-xl font-bold text-indigo-900 dark:text-indigo-100">
-                          {formatCurrency(monthState.extraToGive, locale)}
+                          {formatCurrency(monthState.totalPaid, locale)}
                         </p>
                       </div>
                     </div>
