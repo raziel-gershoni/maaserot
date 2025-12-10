@@ -76,17 +76,41 @@ export default async function DashboardPage() {
     let totalFixedCharities = 0;
     let totalPaid = 0;
 
+    // For snapshot-based calculation
+    let snapshotTotalMaaser = 0;
+    let snapshotTotalFixedCharities = 0;
+    let allMembersHaveSnapshots = true;
+
     for (const member of members) {
       totalMaaser += member.monthState.totalMaaser;
       totalFixedCharities += member.monthState.fixedCharitiesTotal;
       totalPaid += member.monthState.totalPaid;
+
+      // Track if all members have snapshots
+      if (!member.monthState.hasPayments) {
+        allMembersHaveSnapshots = false;
+      }
+
+      // Collect snapshot totals (from first snapshot of each member)
+      if (member.monthState.snapshots.length > 0) {
+        const firstSnapshot = member.monthState.snapshots[0];
+        snapshotTotalMaaser += firstSnapshot.totalMaaser;
+        snapshotTotalFixedCharities += firstSnapshot.fixedCharitiesTotal;
+      }
     }
 
     // Calculate group-level extraToGive (not sum of individual extraToGive!)
     const groupExtraToGive = Math.max(0, totalMaaser - totalFixedCharities);
 
+    // Calculate group-level paid amount
+    // If ALL members have snapshots, use snapshot totals to calculate what was paid
+    // Otherwise, use sum of individual payments
+    const groupPaid = allMembersHaveSnapshots
+      ? Math.max(0, snapshotTotalMaaser - snapshotTotalFixedCharities)
+      : totalPaid;
+
     // Calculate group-level unpaid
-    const groupUnpaid = Math.max(0, groupExtraToGive - totalPaid);
+    const groupUnpaid = Math.max(0, groupExtraToGive - groupPaid);
 
     groupData = {
       members,

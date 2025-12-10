@@ -34,7 +34,8 @@ export async function PATCH(request: Request) {
     const partnerIds = selectedShares.map((share) => share.ownerId);
     const allUserIds = [session.user.id, ...partnerIds];
 
-    // Create payment snapshots for ALL group members (even if individually unpaid = 0)
+    // Create payment snapshots for ALL group members
+    // Each snapshot stores the individual's own unpaid amount (not group-distributed)
     const snapshots = [];
     for (const userId of allUserIds) {
       const state = await calculateCurrentMonthState(userId, month);
@@ -57,7 +58,8 @@ export async function PATCH(request: Request) {
         ? fixedCharities.reduce((sum, c) => sum + c.amount, 0)
         : 0;
 
-      // Create snapshot for each member (amountPaid may be 0 for some members)
+      // Create snapshot with individual's own unpaid amount
+      // Group totals will be recalculated dynamically on dashboard using group logic
       const snapshot = await prisma.paymentSnapshot.create({
         data: {
           userId,
@@ -65,7 +67,7 @@ export async function PATCH(request: Request) {
           totalMaaser: state.totalMaaser,
           fixedCharitiesTotal,
           extraToGive: state.extraToGive,
-          amountPaid: state.unpaid, // Individual contribution (may be 0)
+          amountPaid: state.unpaid, // Individual's own unpaid (may be 0)
           incomeSnapshot: incomes,
           fixedCharitiesSnapshot: fixedCharities,
         }
