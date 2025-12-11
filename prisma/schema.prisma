@@ -19,11 +19,12 @@ model User {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  fixedCharities    FixedCharity[]
-  incomes           Income[]
-  paymentSnapshots  PaymentSnapshot[]
-  sharedWith        SharedAccess[] @relation("owner")
-  sharedFrom        SharedAccess[] @relation("viewer")
+  fixedCharities          FixedCharity[]
+  incomes                 Income[]
+  groupPaymentSnapshots   GroupPaymentSnapshot[]
+  groupPaymentMemberships GroupPaymentMember[]
+  sharedWith              SharedAccess[]         @relation("owner")
+  sharedFrom              SharedAccess[]         @relation("viewer")
 }
 
 model FixedCharity {
@@ -53,28 +54,39 @@ model Income {
   @@index([userId, month])
 }
 
-model PaymentSnapshot {
-  id                     String   @id @default(cuid())
-  userId                 String
-  user                   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  month                  String   // "2024-12" format
+model GroupPaymentSnapshot {
+  id                       String   @id @default(cuid())
+  month                    String   // "2024-12"
+  groupOwnerId             String   // Who initiated payment
+  groupOwner               User     @relation(fields: [groupOwnerId], references: [id], onDelete: Cascade)
 
-  // When payment was made
-  paidAt                 DateTime @default(now())
+  // Group financial totals
+  totalGroupMaaser         Int      // Sum of all members' maaser
+  totalGroupFixedCharities Int      // Sum of fixed charities (only for first payment per user)
+  groupAmountPaid          Int      // Total amount paid by group
 
-  // Financial state at time of payment
-  totalMaaser            Int      // Total maaser at this moment
-  fixedCharitiesTotal    Int      // Fixed charities deducted (0 if not first)
-  amountPaid             Int      // Amount user paid in THIS event
+  // Member composition snapshot
+  memberStates             Json     // [{userId, totalMaaser, fixedCharitiesTotal, unpaid}]
 
-  // Snapshots for audit trail
-  incomeSnapshot         Json     // Array of {id, amount, percentage, maaser}
-  fixedCharitiesSnapshot Json     // Array of {name, amount}
+  // Many-to-many helper for efficient queries
+  members                  GroupPaymentMember[]
 
-  createdAt              DateTime @default(now())
+  paidAt                   DateTime @default(now())
+  createdAt                DateTime @default(now())
 
-  @@index([userId, month])
-  @@index([userId, paidAt])
+  @@index([groupOwnerId, month])
+  @@index([month])
+}
+
+model GroupPaymentMember {
+  id                      String                @id @default(cuid())
+  groupPaymentSnapshotId  String
+  groupPaymentSnapshot    GroupPaymentSnapshot  @relation(fields: [groupPaymentSnapshotId], references: [id], onDelete: Cascade)
+  userId                  String
+  user                    User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@unique([groupPaymentSnapshotId, userId])
 }
 
 model SharedAccess {

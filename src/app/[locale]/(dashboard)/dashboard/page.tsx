@@ -6,7 +6,7 @@ import { calculateCurrentMonthState, calculateTotalAccumulatedUnpaid } from '@/l
 import { getTranslations } from 'next-intl/server';
 import { Link } from '@/i18n/routing';
 import PaymentModal from '@/components/PaymentModal';
-import GroupMarkAsPaidButton from '@/components/GroupMarkAsPaidButton';
+import GroupPaymentModal from '@/components/GroupPaymentModal';
 
 export default async function DashboardPage() {
   const session = await auth();
@@ -71,43 +71,50 @@ export default async function DashboardPage() {
       });
     }
 
-    // Calculate totals
+    // Get all member IDs
+    const allMemberIds = members.map(m => m.userId);
+
+    // Fetch group snapshots for this month
+    const groupSnapshots = await prisma.groupPaymentSnapshot.findMany({
+      where: {
+        month: currentMonth,
+        members: { some: { userId: { in: allMemberIds } } }
+      },
+      include: { members: true },
+      orderBy: { paidAt: 'asc' }
+    });
+
+    // Filter to snapshots that match EXACTLY this group composition
+    const exactGroupSnapshots = groupSnapshots.filter(snapshot => {
+      const snapshotMemberIds = snapshot.members.map(m => m.userId).sort();
+      const currentMemberIds = allMemberIds.sort();
+      return JSON.stringify(snapshotMemberIds) === JSON.stringify(currentMemberIds);
+    });
+
+    // Calculate current totals
     let totalMaaser = 0;
     let totalFixedCharities = 0;
-    let totalPaid = 0;
-
-    // For snapshot-based calculation
-    let snapshotTotalMaaser = 0;
-    let snapshotTotalFixedCharities = 0;
-    let allMembersHaveSnapshots = true;
-
     for (const member of members) {
       totalMaaser += member.monthState.totalMaaser;
       totalFixedCharities += member.monthState.fixedCharitiesTotal;
-      totalPaid += member.monthState.totalPaid;
+    }
 
-      // Track if all members have snapshots
-      if (!member.monthState.hasPayments) {
-        allMembersHaveSnapshots = false;
-      }
+    // Calculate group paid and effective fixed charities
+    let groupPaid = 0;
+    let groupFixedCharitiesDeducted = 0;
 
-      // Collect snapshot totals (from first snapshot of each member)
-      if (member.monthState.snapshots.length > 0) {
-        const firstSnapshot = member.monthState.snapshots[0];
-        snapshotTotalMaaser += firstSnapshot.totalMaaser;
-        snapshotTotalFixedCharities += firstSnapshot.fixedCharitiesTotal;
+    for (const snapshot of exactGroupSnapshots) {
+      groupPaid += snapshot.groupAmountPaid;
+      if (exactGroupSnapshots.indexOf(snapshot) === 0) {
+        groupFixedCharitiesDeducted = snapshot.totalGroupFixedCharities;
       }
     }
 
-    // Calculate group-level paid amount
-    // If ALL members have snapshots, use snapshot totals to calculate what was paid
-    // Otherwise, use sum of individual payments
-    const groupPaid = allMembersHaveSnapshots
-      ? Math.max(0, snapshotTotalMaaser - snapshotTotalFixedCharities)
-      : totalPaid;
+    const effectiveFixedCharities = exactGroupSnapshots.length > 0
+      ? groupFixedCharitiesDeducted
+      : totalFixedCharities;
 
-    // Calculate group-level unpaid (directly, without extraToGive intermediate)
-    const groupUnpaid = Math.max(0, totalMaaser - totalFixedCharities - groupPaid);
+    const groupUnpaid = Math.max(0, totalMaaser - effectiveFixedCharities - groupPaid);
 
     groupData = {
       members,
@@ -190,7 +197,13 @@ export default async function DashboardPage() {
                     {groupData.totals.unpaid === 0 ? '✓ ' + t('paid') : '⏳ ' + t('unpaid')}
                   </span>
                   {groupData.totals.unpaid > 0 && (
-                    <GroupMarkAsPaidButton month={currentMonth} label={t('markGroupAsPaid')} />
+                    <GroupPaymentModal
+                      month={currentMonth}
+                      totalUnpaid={groupData.totals.unpaid}
+                      locale={locale}
+                      label={t('markGroupAsPaid')}
+                      memberIds={groupData.members.map((m: any) => m.userId)}
+                    />
                   )}
                 </div>
               </div>
@@ -289,6 +302,7 @@ export default async function DashboardPage() {
                         unpaidAmount={monthState.unpaid}
                         locale={locale}
                         label={t('markAsPaid')}
+                        userId={session.user.id}
                       />
                     )}
                   </div>

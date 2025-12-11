@@ -21,8 +21,10 @@ export default async function HistoryPage() {
     distinct: ['month']
   });
 
-  const snapshotMonths = await prisma.paymentSnapshot.findMany({
-    where: { userId: session.user.id },
+  const snapshotMonths = await prisma.groupPaymentSnapshot.findMany({
+    where: {
+      members: { some: { userId: session.user.id } }
+    },
     select: { month: true },
     distinct: ['month']
   });
@@ -70,11 +72,6 @@ export default async function HistoryPage() {
           {monthStates.length > 0 ? (
             <div className="space-y-4">
               {monthStates.map((monthState) => {
-                // Get fixed charities from first snapshot, if any
-                const fixedCharities = monthState.snapshots.length > 0
-                  ? (monthState.snapshots[0].fixedCharitiesSnapshot as Array<{ name: string; amount: number; }>)
-                  : [];
-
                 // Get latest payment date
                 const latestSnapshot = monthState.snapshots.length > 0
                   ? monthState.snapshots[monthState.snapshots.length - 1]
@@ -109,7 +106,7 @@ export default async function HistoryPage() {
                     </div>
 
                     {/* Summary Cards */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <div className="bg-blue-50 dark:bg-blue-900/30 rounded-lg p-4 border border-blue-200 dark:border-blue-700">
                         <p className="text-xs font-medium text-blue-800 dark:text-blue-200 mb-1">{t('totalMaaser')}</p>
                         <p className="text-xl font-bold text-blue-900 dark:text-blue-100">
@@ -129,28 +126,6 @@ export default async function HistoryPage() {
                         </p>
                       </div>
                     </div>
-
-                    {/* Fixed Charities Snapshot */}
-                    {fixedCharities && fixedCharities.length > 0 && (
-                      <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-                        <p className="text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">
-                          {t('fixedCharities')} ({fixedCharities.length})
-                        </p>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                          {fixedCharities.map((charity, idx) => (
-                            <div
-                              key={idx}
-                              className="flex justify-between items-center bg-white dark:bg-gray-800 rounded px-3 py-2 border border-gray-200 dark:border-gray-700"
-                            >
-                              <span className="text-sm text-gray-700 dark:text-gray-300">{charity.name}</span>
-                              <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-                                {formatCurrency(charity.amount, locale)}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
                   </div>
                 );
               })}

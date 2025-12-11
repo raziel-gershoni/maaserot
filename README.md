@@ -4,12 +4,16 @@ A web application to track monthly income and calculate charity (maaser) obligat
 
 ## Features
 
-- Track monthly income with customizable percentage for charity
-- Manage fixed monthly charity commitments
-- Calculate remaining charity obligations
-- Mark months as paid
-- Multi-language support (Hebrew RTL + English)
-- Secure authentication with NextAuth
+- **Income Tracking**: Track monthly income with customizable percentage for charity
+- **Fixed Charities**: Manage fixed monthly charity commitments
+- **Payment Tracking**: Flexible payment system with partial payment support
+  - Individual payments (personal maaser tracking)
+  - Group payments (combined family/partnership tracking)
+  - Payment slider for custom amounts
+- **Shared Access**: Share and view combined charity obligations with partners
+- **Payment History**: Complete audit trail with frozen income snapshots
+- **Multi-language**: Hebrew (RTL) and English support
+- **Secure Authentication**: NextAuth.js with credentials provider
 
 ## Getting Started
 
@@ -111,6 +115,27 @@ npx prisma studio
 # Reset database (WARNING: deletes all data)
 npx prisma migrate reset
 ```
+
+### Testing
+
+The project includes integration tests for payment scenarios:
+
+```bash
+# Run tests once
+npm test -- --run
+
+# Run tests in watch mode
+npm test
+
+# Run tests with UI
+npm test:ui
+```
+
+Tests cover:
+- Individual payments (group of 1)
+- Group payments (multiple members)
+- Mixed individual + group payments in same month
+- Partial payments
 
 ### Build for Production
 

@@ -9,22 +9,35 @@ export async function calculateCurrentMonthState(userId: string, month: string) 
 
   const totalMaaser = incomes.reduce((sum, i) => sum + i.maaser, 0);
 
-  // Fetch all payment snapshots for month
-  const snapshots = await prisma.paymentSnapshot.findMany({
-    where: { userId, month },
-    orderBy: { paidAt: 'asc' }
+  // Fetch group snapshots where this user is a member
+  const groupSnapshots = await prisma.groupPaymentSnapshot.findMany({
+    where: {
+      month,
+      members: { some: { userId } }
+    },
+    orderBy: { paidAt: 'asc' },
+    include: { members: true }
   });
 
-  // Fixed charities deducted in first payment only
+  // Calculate fixed charities and total paid
   const fixedCharities = await prisma.fixedCharity.findMany({
     where: { userId, isActive: true }
   });
-  const fixedCharitiesTotal = snapshots.length === 0
-    ? fixedCharities.reduce((sum, c) => sum + c.amount, 0)
-    : snapshots[0].fixedCharitiesTotal;
 
-  // Calculate total paid this month
-  const totalPaid = snapshots.reduce((sum, s) => sum + s.amountPaid, 0);
+  let fixedCharitiesTotal = 0;
+  let totalPaid = 0;
+
+  // Check if user has made any solo payments (group of 1)
+  const soloSnapshots = groupSnapshots.filter(s => s.members.length === 1);
+
+  if (soloSnapshots.length > 0) {
+    // Use first solo payment's fixed charities
+    fixedCharitiesTotal = soloSnapshots[0].totalGroupFixedCharities;
+    totalPaid = soloSnapshots.reduce((sum, s) => sum + s.groupAmountPaid, 0);
+  } else {
+    // No solo payments yet
+    fixedCharitiesTotal = fixedCharities.reduce((sum, c) => sum + c.amount, 0);
+  }
 
   // Unpaid amount this month (calculated directly)
   const unpaid = Math.max(0, totalMaaser - fixedCharitiesTotal - totalPaid);
@@ -34,8 +47,8 @@ export async function calculateCurrentMonthState(userId: string, month: string) 
     fixedCharitiesTotal,
     totalPaid,
     unpaid,
-    snapshots,
-    hasPayments: snapshots.length > 0
+    snapshots: groupSnapshots,
+    hasPayments: groupSnapshots.length > 0
   };
 }
 
@@ -51,8 +64,10 @@ export async function calculateTotalAccumulatedUnpaid(
     distinct: ['month']
   });
 
-  const snapshotMonths = await prisma.paymentSnapshot.findMany({
-    where: { userId },
+  const snapshotMonths = await prisma.groupPaymentSnapshot.findMany({
+    where: {
+      members: { some: { userId } }
+    },
     select: { month: true },
     distinct: ['month']
   });
