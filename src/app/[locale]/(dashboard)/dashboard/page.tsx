@@ -5,7 +5,7 @@ import { getCurrentMonth, formatCurrency } from '@/lib/calculations';
 import { calculateCurrentMonthState, calculateTotalAccumulatedUnpaid } from '@/lib/monthState';
 import { getTranslations } from 'next-intl/server';
 import { Link } from '@/i18n/routing';
-import MarkAsPaidButton from '@/components/MarkAsPaidButton';
+import PaymentModal from '@/components/PaymentModal';
 import GroupMarkAsPaidButton from '@/components/GroupMarkAsPaidButton';
 
 export default async function DashboardPage() {
@@ -284,7 +284,12 @@ export default async function DashboardPage() {
                       {monthState.unpaid === 0 ? '✓ ' + t('paid') : '⏳ ' + t('unpaid')}
                     </span>
                     {monthState.unpaid > 0 && (
-                      <MarkAsPaidButton month={currentMonth} label={t('markAsPaid')} />
+                      <PaymentModal
+                        month={currentMonth}
+                        unpaidAmount={monthState.unpaid}
+                        locale={locale}
+                        label={t('markAsPaid')}
+                      />
                     )}
                   </div>
                 </div>
