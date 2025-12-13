@@ -2,10 +2,9 @@ import { redirect } from 'next/navigation';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { getCurrentMonth, formatCurrency } from '@/lib/calculations';
-import { calculateCurrentMonthState, calculateTotalAccumulatedUnpaid } from '@/lib/monthState';
+import { calculateCurrentMonthState } from '@/lib/monthState';
 import { getTranslations } from 'next-intl/server';
 import { Link } from '@/i18n/routing';
-import PaymentModal from '@/components/PaymentModal';
 import GroupPaymentModal from '@/components/GroupPaymentModal';
 
 export default async function DashboardPage() {
@@ -44,93 +43,87 @@ export default async function DashboardPage() {
 
   const hasSelectedPartners = selectedShares.length > 0;
 
-  // Fetch group data if there are selected partners
-  let groupData = null;
-  if (hasSelectedPartners) {
-    const members = [];
+  // Build group data - always includes current user, plus any selected partners
+  const members = [];
 
-    // Get current user's data
-    const myMonthState = await calculateCurrentMonthState(session.user.id, currentMonth);
+  // Get current user's data
+  const myMonthState = await calculateCurrentMonthState(session.user.id, currentMonth);
+
+  members.push({
+    userId: session.user.id,
+    name: user?.name || '',
+    email: session.user.email || '',
+    monthState: myMonthState,
+  });
+
+  // Get selected partners' data
+  for (const share of selectedShares) {
+    const monthState = await calculateCurrentMonthState(share.owner.id, currentMonth);
 
     members.push({
-      userId: session.user.id,
-      name: user?.name || '',
-      email: session.user.email || '',
-      monthState: myMonthState,
+      userId: share.owner.id,
+      name: share.owner.name || '',
+      email: share.owner.email,
+      monthState,
     });
-
-    // Get selected partners' data
-    for (const share of selectedShares) {
-      const monthState = await calculateCurrentMonthState(share.owner.id, currentMonth);
-
-      members.push({
-        userId: share.owner.id,
-        name: share.owner.name || '',
-        email: share.owner.email,
-        monthState,
-      });
-    }
-
-    // Get all member IDs
-    const allMemberIds = members.map(m => m.userId);
-
-    // Fetch group snapshots for this month
-    const groupSnapshots = await prisma.groupPaymentSnapshot.findMany({
-      where: {
-        month: currentMonth,
-        members: { some: { userId: { in: allMemberIds } } }
-      },
-      include: { members: true },
-      orderBy: { paidAt: 'asc' }
-    });
-
-    // Filter to snapshots that match EXACTLY this group composition
-    const exactGroupSnapshots = groupSnapshots.filter(snapshot => {
-      const snapshotMemberIds = snapshot.members.map(m => m.userId).sort();
-      const currentMemberIds = allMemberIds.sort();
-      return JSON.stringify(snapshotMemberIds) === JSON.stringify(currentMemberIds);
-    });
-
-    // Calculate current totals
-    let totalMaaser = 0;
-    let totalFixedCharities = 0;
-    for (const member of members) {
-      totalMaaser += member.monthState.totalMaaser;
-      totalFixedCharities += member.monthState.fixedCharitiesTotal;
-    }
-
-    // Calculate group paid and effective fixed charities
-    let groupPaid = 0;
-    let groupFixedCharitiesDeducted = 0;
-
-    for (const snapshot of exactGroupSnapshots) {
-      groupPaid += snapshot.groupAmountPaid;
-      if (exactGroupSnapshots.indexOf(snapshot) === 0) {
-        groupFixedCharitiesDeducted = snapshot.totalGroupFixedCharities;
-      }
-    }
-
-    const effectiveFixedCharities = exactGroupSnapshots.length > 0
-      ? groupFixedCharitiesDeducted
-      : totalFixedCharities;
-
-    const groupUnpaid = Math.max(0, totalMaaser - effectiveFixedCharities - groupPaid);
-
-    groupData = {
-      members,
-      totals: {
-        totalMaaser,
-        totalFixedCharities,
-        totalPaid: groupPaid,
-        unpaid: groupUnpaid,
-      },
-    };
   }
 
-  // Fetch personal data
-  const monthState = await calculateCurrentMonthState(session.user.id, currentMonth);
-  const totalAccumulatedUnpaid = await calculateTotalAccumulatedUnpaid(session.user.id, currentMonth);
+  // Get all member IDs
+  const allMemberIds = members.map(m => m.userId);
 
+  // Fetch group snapshots for this month
+  const groupSnapshots = await prisma.groupPaymentSnapshot.findMany({
+    where: {
+      month: currentMonth,
+      members: { some: { userId: { in: allMemberIds } } }
+    },
+    include: { members: true },
+    orderBy: { paidAt: 'asc' }
+  });
+
+  // Filter to snapshots that match EXACTLY this group composition
+  const exactGroupSnapshots = groupSnapshots.filter(snapshot => {
+    const snapshotMemberIds = snapshot.members.map(m => m.userId).sort();
+    const currentMemberIds = allMemberIds.sort();
+    return JSON.stringify(snapshotMemberIds) === JSON.stringify(currentMemberIds);
+  });
+
+  // Calculate current totals
+  let totalMaaser = 0;
+  let totalFixedCharities = 0;
+  for (const member of members) {
+    totalMaaser += member.monthState.totalMaaser;
+    totalFixedCharities += member.monthState.fixedCharitiesTotal;
+  }
+
+  // Calculate group paid and effective fixed charities
+  let groupPaid = 0;
+  let groupFixedCharitiesDeducted = 0;
+
+  for (const snapshot of exactGroupSnapshots) {
+    groupPaid += snapshot.groupAmountPaid;
+    if (exactGroupSnapshots.indexOf(snapshot) === 0) {
+      groupFixedCharitiesDeducted = snapshot.totalGroupFixedCharities;
+    }
+  }
+
+  const effectiveFixedCharities = exactGroupSnapshots.length > 0
+    ? groupFixedCharitiesDeducted
+    : totalFixedCharities;
+
+  const groupUnpaid = Math.max(0, totalMaaser - effectiveFixedCharities - groupPaid);
+
+  const groupData = {
+    members,
+    totals: {
+      totalMaaser,
+      totalFixedCharities,
+      totalPaid: groupPaid,
+      unpaid: groupUnpaid,
+    },
+  };
+
+  // Fetch user's income for display
   const incomes = await prisma.income.findMany({
     where: {
       userId: session.user.id,
@@ -161,71 +154,14 @@ export default async function DashboardPage() {
           </Link>
         </div>
 
-        {/* Personal Status - Always shown */}
-        {monthState.totalMaaser > 0 ? (
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 md:p-8 mb-6 border border-gray-200 dark:border-gray-700">
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">{t('currentMonth')}</h2>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-              <div className="bg-blue-50 dark:bg-blue-900/30 rounded-lg p-5 border border-blue-200 dark:border-blue-700">
-                <p className="text-sm font-medium text-blue-800 dark:text-blue-200 mb-1">{t('totalMaaser')}</p>
-                <p className="text-3xl font-bold text-blue-900 dark:text-blue-100">
-                  {formatCurrency(monthState.totalMaaser, locale)}
-                </p>
-              </div>
-              <div className="bg-green-50 dark:bg-green-900/30 rounded-lg p-5 border border-green-200 dark:border-green-700">
-                <p className="text-sm font-medium text-green-800 dark:text-green-200 mb-1">{t('fixedCharities')}</p>
-                <p className="text-3xl font-bold text-green-900 dark:text-green-100">
-                  {formatCurrency(monthState.fixedCharitiesTotal, locale)}
-                </p>
-              </div>
-              <div className="bg-purple-50 dark:bg-purple-900/30 rounded-lg p-5 border border-purple-200 dark:border-purple-700">
-                <p className="text-sm font-medium text-purple-800 dark:text-purple-200 mb-1">{t('totalPaid')}</p>
-                <p className="text-3xl font-bold text-purple-900 dark:text-purple-100">
-                  {formatCurrency(monthState.totalPaid, locale)}
-                </p>
-              </div>
-            </div>
-
-            <div className="bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-900/30 dark:to-purple-900/30 rounded-lg p-6 border-2 border-indigo-200 dark:border-indigo-700">
-              <p className="text-sm font-medium text-indigo-800 dark:text-indigo-200 mb-2">{t('unpaid')}</p>
-              <p className="text-4xl font-bold text-indigo-900 dark:text-indigo-100 mb-4">
-                {formatCurrency(monthState.unpaid, locale)}
-              </p>
-
-              <div className="flex items-center gap-3">
-                <span className={`inline-block px-4 py-2 rounded-lg text-sm font-bold ${
-                  monthState.unpaid === 0
-                    ? 'bg-green-600 text-white dark:bg-green-700'
-                    : 'bg-yellow-500 text-gray-900 dark:bg-yellow-600 dark:text-gray-100'
-                }`}>
-                  {monthState.unpaid === 0 ? '✓ ' + t('paid') : '⏳ ' + t('unpaid')}
-                </span>
-                {monthState.unpaid > 0 && (
-                  <PaymentModal
-                    month={currentMonth}
-                    unpaidAmount={monthState.unpaid}
-                    locale={locale}
-                    label={t('markAsPaid')}
-                    userId={session.user.id}
-                  />
-                )}
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-8 mb-6 border border-gray-200 dark:border-gray-700 text-center">
-            <p className="text-xl text-gray-700 dark:text-gray-300 mb-4">{t('nothingToPay')}</p>
-            <p className="text-gray-600 dark:text-gray-400">{t('addFirstIncome')}</p>
-          </div>
-        )}
-
-        {/* Group Summary - Shown only when partners are selected */}
-        {groupData && (
+        {/* Unified Group View - Always shown (group of 1 or N) */}
+        {groupData.totals.totalMaaser > 0 ? (
           <div className="space-y-6 mb-6">
             {/* Combined Metrics */}
             <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 md:p-8 border border-gray-200 dark:border-gray-700">
-              <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">{t('groupSummary')}</h2>
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">
+                {hasSelectedPartners ? t('groupSummary') : t('currentMonth')}
+              </h2>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
                 <div className="bg-blue-50 dark:bg-blue-900/30 rounded-lg p-5 border border-blue-200 dark:border-blue-700">
@@ -267,7 +203,7 @@ export default async function DashboardPage() {
                       month={currentMonth}
                       totalUnpaid={groupData.totals.unpaid}
                       locale={locale}
-                      label={t('markGroupAsPaid')}
+                      label={hasSelectedPartners ? t('markGroupAsPaid') : t('markAsPaid')}
                       memberIds={groupData.members.map((m: any) => m.userId)}
                     />
                   )}
@@ -275,9 +211,10 @@ export default async function DashboardPage() {
               </div>
             </div>
 
-            {/* Partner Breakdown */}
-            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 md:p-8 border border-gray-200 dark:border-gray-700">
-              <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">{t('partnerBreakdown')}</h3>
+            {/* Member Breakdown - Only show when there are multiple members */}
+            {hasSelectedPartners && (
+              <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 md:p-8 border border-gray-200 dark:border-gray-700">
+                <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">{t('partnerBreakdown')}</h3>
               <div className="space-y-4">
                 {groupData.members.map((member: any) => (
                   <div key={member.userId} className="p-4 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700">
@@ -325,6 +262,12 @@ export default async function DashboardPage() {
                 ))}
               </div>
             </div>
+            )}
+          </div>
+        ) : (
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-8 mb-6 border border-gray-200 dark:border-gray-700 text-center">
+            <p className="text-xl text-gray-700 dark:text-gray-300 mb-4">{t('nothingToPay')}</p>
+            <p className="text-gray-600 dark:text-gray-400">{t('addFirstIncome')}</p>
           </div>
         )}
 
