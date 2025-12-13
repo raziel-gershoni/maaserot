@@ -317,7 +317,7 @@ export default function IncomePage() {
                             {new Date(income.createdAt).toLocaleDateString()}
                             {income.isFrozen && (
                               <span className="ml-2 text-xs text-orange-600 dark:text-orange-400 font-semibold">
-                                🔒 Frozen
+                                🔒 {t('frozen')}
                               </span>
                             )}
                           </div>

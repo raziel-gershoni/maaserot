@@ -83,7 +83,8 @@
     "edit": "ערוך",
     "delete": "מחק",
     "save": "שמור",
-    "cancel": "ביטול"
+    "cancel": "ביטול",
+    "frozen": "קפוא"
   },
   "charities": {
     "title": "תרומות קבועות",

@@ -83,7 +83,8 @@
     "edit": "Edit",
     "delete": "Delete",
     "save": "Save",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "frozen": "Frozen"
   },
   "charities": {
     "title": "Fixed Charities",
