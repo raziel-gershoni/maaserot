@@ -93,6 +93,25 @@ export default function PaymentModal({ month, unpaidAmount, locale, label, userI
                 <span>{formatCurrency(0, locale)}</span>
                 <span>{formatCurrency(unpaidAmount, locale)}</span>
               </div>
+
+              <div className="mt-4">
+                <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">
+                  Or enter exact amount (₪):
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  max={(unpaidAmount / 100).toFixed(2)}
+                  step="0.01"
+                  value={(paymentAmount / 100).toFixed(2)}
+                  onChange={(e) => {
+                    const shekels = parseFloat(e.target.value) || 0;
+                    const agorot = Math.round(shekels * 100);
+                    setPaymentAmount(Math.min(Math.max(0, agorot), unpaidAmount));
+                  }}
+                  className="w-full px-4 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                />
+              </div>
             </div>
 
             <div className="flex gap-3">

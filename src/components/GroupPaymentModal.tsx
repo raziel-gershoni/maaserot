@@ -97,6 +97,25 @@ export default function GroupPaymentModal({ month, totalUnpaid, locale, label, m
                 <span>{formatCurrency(0, locale)}</span>
                 <span>{formatCurrency(totalUnpaid, locale)}</span>
               </div>
+
+              <div className="mt-4">
+                <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">
+                  Or enter exact amount (₪):
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  max={(totalUnpaid / 100).toFixed(2)}
+                  step="0.01"
+                  value={(paymentAmount / 100).toFixed(2)}
+                  onChange={(e) => {
+                    const shekels = parseFloat(e.target.value) || 0;
+                    const agorot = Math.round(shekels * 100);
+                    setPaymentAmount(Math.min(Math.max(0, agorot), totalUnpaid));
+                  }}
+                  className="w-full px-4 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                />
+              </div>
             </div>
 
             <div className="flex gap-3">
