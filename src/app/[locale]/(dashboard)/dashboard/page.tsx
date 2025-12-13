@@ -121,6 +121,7 @@ export default async function DashboardPage() {
       totals: {
         totalMaaser,
         totalFixedCharities,
+        totalPaid: groupPaid,
         unpaid: groupUnpaid,
       },
     };
@@ -160,14 +161,73 @@ export default async function DashboardPage() {
           </Link>
         </div>
 
-        {groupData ? (
-          /* Group View - Shown when partners are selected */
+        {/* Personal Status - Always shown */}
+        {monthState.totalMaaser > 0 ? (
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 md:p-8 mb-6 border border-gray-200 dark:border-gray-700">
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">{t('currentMonth')}</h2>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+              <div className="bg-blue-50 dark:bg-blue-900/30 rounded-lg p-5 border border-blue-200 dark:border-blue-700">
+                <p className="text-sm font-medium text-blue-800 dark:text-blue-200 mb-1">{t('totalMaaser')}</p>
+                <p className="text-3xl font-bold text-blue-900 dark:text-blue-100">
+                  {formatCurrency(monthState.totalMaaser, locale)}
+                </p>
+              </div>
+              <div className="bg-green-50 dark:bg-green-900/30 rounded-lg p-5 border border-green-200 dark:border-green-700">
+                <p className="text-sm font-medium text-green-800 dark:text-green-200 mb-1">{t('fixedCharities')}</p>
+                <p className="text-3xl font-bold text-green-900 dark:text-green-100">
+                  {formatCurrency(monthState.fixedCharitiesTotal, locale)}
+                </p>
+              </div>
+              <div className="bg-purple-50 dark:bg-purple-900/30 rounded-lg p-5 border border-purple-200 dark:border-purple-700">
+                <p className="text-sm font-medium text-purple-800 dark:text-purple-200 mb-1">{t('totalPaid')}</p>
+                <p className="text-3xl font-bold text-purple-900 dark:text-purple-100">
+                  {formatCurrency(monthState.totalPaid, locale)}
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-900/30 dark:to-purple-900/30 rounded-lg p-6 border-2 border-indigo-200 dark:border-indigo-700">
+              <p className="text-sm font-medium text-indigo-800 dark:text-indigo-200 mb-2">{t('unpaid')}</p>
+              <p className="text-4xl font-bold text-indigo-900 dark:text-indigo-100 mb-4">
+                {formatCurrency(monthState.unpaid, locale)}
+              </p>
+
+              <div className="flex items-center gap-3">
+                <span className={`inline-block px-4 py-2 rounded-lg text-sm font-bold ${
+                  monthState.unpaid === 0
+                    ? 'bg-green-600 text-white dark:bg-green-700'
+                    : 'bg-yellow-500 text-gray-900 dark:bg-yellow-600 dark:text-gray-100'
+                }`}>
+                  {monthState.unpaid === 0 ? '✓ ' + t('paid') : '⏳ ' + t('unpaid')}
+                </span>
+                {monthState.unpaid > 0 && (
+                  <PaymentModal
+                    month={currentMonth}
+                    unpaidAmount={monthState.unpaid}
+                    locale={locale}
+                    label={t('markAsPaid')}
+                    userId={session.user.id}
+                  />
+                )}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-8 mb-6 border border-gray-200 dark:border-gray-700 text-center">
+            <p className="text-xl text-gray-700 dark:text-gray-300 mb-4">{t('nothingToPay')}</p>
+            <p className="text-gray-600 dark:text-gray-400">{t('addFirstIncome')}</p>
+          </div>
+        )}
+
+        {/* Group Summary - Shown only when partners are selected */}
+        {groupData && (
           <div className="space-y-6 mb-6">
             {/* Combined Metrics */}
             <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 md:p-8 border border-gray-200 dark:border-gray-700">
               <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">{t('groupSummary')}</h2>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
                 <div className="bg-blue-50 dark:bg-blue-900/30 rounded-lg p-5 border border-blue-200 dark:border-blue-700">
                   <p className="text-sm font-medium text-blue-800 dark:text-blue-200 mb-1">{t('totalMaaser')}</p>
                   <p className="text-3xl font-bold text-blue-900 dark:text-blue-100">
@@ -178,6 +238,12 @@ export default async function DashboardPage() {
                   <p className="text-sm font-medium text-green-800 dark:text-green-200 mb-1">{t('fixedCharities')}</p>
                   <p className="text-3xl font-bold text-green-900 dark:text-green-100">
                     {formatCurrency(groupData.totals.totalFixedCharities, locale)}
+                  </p>
+                </div>
+                <div className="bg-purple-50 dark:bg-purple-900/30 rounded-lg p-5 border border-purple-200 dark:border-purple-700">
+                  <p className="text-sm font-medium text-purple-800 dark:text-purple-200 mb-1">{t('totalPaid')}</p>
+                  <p className="text-3xl font-bold text-purple-900 dark:text-purple-100">
+                    {formatCurrency(groupData.totals.totalPaid, locale)}
                   </p>
                 </div>
               </div>
@@ -260,67 +326,6 @@ export default async function DashboardPage() {
               </div>
             </div>
           </div>
-        ) : (
-          /* Personal View - Shown when no partners selected */
-          <>
-            {monthState.totalMaaser > 0 ? (
-              <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 md:p-8 mb-6 border border-gray-200 dark:border-gray-700">
-                <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">{t('currentMonth')}</h2>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-                  <div className="bg-blue-50 dark:bg-blue-900/30 rounded-lg p-5 border border-blue-200 dark:border-blue-700">
-                    <p className="text-sm font-medium text-blue-800 dark:text-blue-200 mb-1">{t('totalMaaser')}</p>
-                    <p className="text-3xl font-bold text-blue-900 dark:text-blue-100">
-                      {formatCurrency(monthState.totalMaaser, locale)}
-                    </p>
-                  </div>
-                  <div className="bg-green-50 dark:bg-green-900/30 rounded-lg p-5 border border-green-200 dark:border-green-700">
-                    <p className="text-sm font-medium text-green-800 dark:text-green-200 mb-1">{t('fixedCharities')}</p>
-                    <p className="text-3xl font-bold text-green-900 dark:text-green-100">
-                      {formatCurrency(monthState.fixedCharitiesTotal, locale)}
-                    </p>
-                  </div>
-                  <div className="bg-purple-50 dark:bg-purple-900/30 rounded-lg p-5 border border-purple-200 dark:border-purple-700">
-                    <p className="text-sm font-medium text-purple-800 dark:text-purple-200 mb-1">{t('totalPaid')}</p>
-                    <p className="text-3xl font-bold text-purple-900 dark:text-purple-100">
-                      {formatCurrency(monthState.totalPaid, locale)}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-900/30 dark:to-purple-900/30 rounded-lg p-6 border-2 border-indigo-200 dark:border-indigo-700">
-                  <p className="text-sm font-medium text-indigo-800 dark:text-indigo-200 mb-2">{t('unpaid')}</p>
-                  <p className="text-4xl font-bold text-indigo-900 dark:text-indigo-100 mb-4">
-                    {formatCurrency(monthState.unpaid, locale)}
-                  </p>
-
-                  <div className="flex items-center gap-3">
-                    <span className={`inline-block px-4 py-2 rounded-lg text-sm font-bold ${
-                      monthState.unpaid === 0
-                        ? 'bg-green-600 text-white dark:bg-green-700'
-                        : 'bg-yellow-500 text-gray-900 dark:bg-yellow-600 dark:text-gray-100'
-                    }`}>
-                      {monthState.unpaid === 0 ? '✓ ' + t('paid') : '⏳ ' + t('unpaid')}
-                    </span>
-                    {monthState.unpaid > 0 && (
-                      <PaymentModal
-                        month={currentMonth}
-                        unpaidAmount={monthState.unpaid}
-                        locale={locale}
-                        label={t('markAsPaid')}
-                        userId={session.user.id}
-                      />
-                    )}
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-8 mb-6 border border-gray-200 dark:border-gray-700 text-center">
-                <p className="text-xl text-gray-700 dark:text-gray-300 mb-4">{t('nothingToPay')}</p>
-                <p className="text-gray-600 dark:text-gray-400">{t('addFirstIncome')}</p>
-              </div>
-            )}
-          </>
         )}
 
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 md:p-8 border border-gray-200 dark:border-gray-700">
