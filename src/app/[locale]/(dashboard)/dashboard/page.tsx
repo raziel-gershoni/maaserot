@@ -267,7 +267,7 @@ export default async function DashboardPage() {
               <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 md:p-8 mb-6 border border-gray-200 dark:border-gray-700">
                 <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">{t('currentMonth')}</h2>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
                   <div className="bg-blue-50 dark:bg-blue-900/30 rounded-lg p-5 border border-blue-200 dark:border-blue-700">
                     <p className="text-sm font-medium text-blue-800 dark:text-blue-200 mb-1">{t('totalMaaser')}</p>
                     <p className="text-3xl font-bold text-blue-900 dark:text-blue-100">
@@ -278,6 +278,12 @@ export default async function DashboardPage() {
                     <p className="text-sm font-medium text-green-800 dark:text-green-200 mb-1">{t('fixedCharities')}</p>
                     <p className="text-3xl font-bold text-green-900 dark:text-green-100">
                       {formatCurrency(monthState.fixedCharitiesTotal, locale)}
+                    </p>
+                  </div>
+                  <div className="bg-purple-50 dark:bg-purple-900/30 rounded-lg p-5 border border-purple-200 dark:border-purple-700">
+                    <p className="text-sm font-medium text-purple-800 dark:text-purple-200 mb-1">{t('totalPaid')}</p>
+                    <p className="text-3xl font-bold text-purple-900 dark:text-purple-100">
+                      {formatCurrency(monthState.totalPaid, locale)}
                     </p>
                   </div>
                 </div>
