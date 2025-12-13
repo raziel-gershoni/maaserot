@@ -71,11 +71,29 @@ export default function PaymentModal({ month, unpaidAmount, locale, label, userI
             </h2>
 
             <div className="mb-6">
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-sm text-gray-600 dark:text-gray-400">Amount to pay:</span>
-                <span className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">
-                  {formatCurrency(paymentAmount, locale)}
-                </span>
+              <div className="mb-4">
+                <div className="text-sm text-gray-600 dark:text-gray-400 mb-2">Amount to pay:</div>
+                <div className="flex items-center justify-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setPaymentAmount(Math.max(0, paymentAmount - 100))}
+                    disabled={paymentAmount <= 0}
+                    className="w-12 h-12 flex items-center justify-center bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-900 dark:text-white rounded-lg font-bold text-2xl disabled:opacity-30 disabled:cursor-not-allowed transition active:scale-95"
+                  >
+                    ↓
+                  </button>
+                  <span className="text-3xl font-bold text-indigo-600 dark:text-indigo-400 min-w-[140px] text-center">
+                    {formatCurrency(paymentAmount, locale)}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setPaymentAmount(Math.min(unpaidAmount, paymentAmount + 100))}
+                    disabled={paymentAmount >= unpaidAmount}
+                    className="w-12 h-12 flex items-center justify-center bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-900 dark:text-white rounded-lg font-bold text-2xl disabled:opacity-30 disabled:cursor-not-allowed transition active:scale-95"
+                  >
+                    ↑
+                  </button>
+                </div>
               </div>
 
               <input
@@ -92,25 +110,6 @@ export default function PaymentModal({ month, unpaidAmount, locale, label, userI
               <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 mt-1">
                 <span>{formatCurrency(0, locale)}</span>
                 <span>{formatCurrency(unpaidAmount, locale)}</span>
-              </div>
-
-              <div className="mt-4">
-                <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">
-                  Or enter exact amount (₪):
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  max={(unpaidAmount / 100).toFixed(2)}
-                  step="0.01"
-                  value={(paymentAmount / 100).toFixed(2)}
-                  onChange={(e) => {
-                    const shekels = parseFloat(e.target.value) || 0;
-                    const agorot = Math.round(shekels * 100);
-                    setPaymentAmount(Math.min(Math.max(0, agorot), unpaidAmount));
-                  }}
-                  className="w-full px-4 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                />
               </div>
             </div>
 
