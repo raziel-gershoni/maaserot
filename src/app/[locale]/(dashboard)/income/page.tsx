@@ -315,26 +315,33 @@ export default function IncomePage() {
                           </div>
                           <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                             {new Date(income.createdAt).toLocaleDateString()}
+                            {income.isFrozen && (
+                              <span className="ml-2 text-xs text-orange-600 dark:text-orange-400 font-semibold">
+                                🔒 Frozen
+                              </span>
+                            )}
                           </div>
                         </div>
                         <span className="text-xl font-bold text-gray-900 dark:text-gray-100">
                           {formatCurrency(income.amount)}
                         </span>
                       </div>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => startEdit(income)}
-                          className="px-3 py-1 bg-blue-500 hover:bg-blue-600 dark:bg-blue-600 dark:hover:bg-blue-500 text-white rounded-lg text-sm font-semibold transition"
-                        >
-                          {t('edit')}
-                        </button>
-                        <button
-                          onClick={() => deleteIncome(income.id)}
-                          className="px-3 py-1 bg-red-500 hover:bg-red-600 dark:bg-red-600 dark:hover:bg-red-500 text-white rounded-lg text-sm font-semibold transition"
-                        >
-                          {t('delete')}
-                        </button>
-                      </div>
+                      {!income.isFrozen && (
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => startEdit(income)}
+                            className="px-3 py-1 bg-blue-500 hover:bg-blue-600 dark:bg-blue-600 dark:hover:bg-blue-500 text-white rounded-lg text-sm font-semibold transition"
+                          >
+                            {t('edit')}
+                          </button>
+                          <button
+                            onClick={() => deleteIncome(income.id)}
+                            className="px-3 py-1 bg-red-500 hover:bg-red-600 dark:bg-red-600 dark:hover:bg-red-500 text-white rounded-lg text-sm font-semibold transition"
+                          >
+                            {t('delete')}
+                          </button>
+                        </div>
+                      )}
                     </div>
                   )}
                 </li>
