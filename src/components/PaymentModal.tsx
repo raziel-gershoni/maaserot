@@ -85,7 +85,8 @@ export default function PaymentModal({ month, unpaidAmount, locale, label, userI
                 step="100"
                 value={paymentAmount}
                 onChange={(e) => setPaymentAmount(parseInt(e.target.value))}
-                className="w-full h-3 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+                className="w-full h-4 md:h-3 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-indigo-600 touch-none"
+                style={{ WebkitTapHighlightColor: 'transparent' }}
               />
 
               <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 mt-1">
