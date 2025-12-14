@@ -218,24 +218,15 @@ export default async function DashboardPage() {
               <div className="space-y-4">
                 {groupData.members.map((member: any) => (
                   <div key={member.userId} className="p-4 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700">
-                    <div className="flex justify-between items-start mb-2">
-                      <div>
-                        <p className="font-semibold text-gray-900 dark:text-white">
-                          {member.name || member.email}
-                          {member.userId === session.user.id && <span className="text-sm text-gray-500 ml-2">(You)</span>}
-                        </p>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">{member.email}</p>
-                      </div>
-                      <span className={`px-3 py-1 rounded-lg text-xs font-bold ${
-                        groupData.totals.unpaid === 0 && member.monthState.unpaid === 0
-                          ? 'bg-green-600 text-white'
-                          : 'bg-yellow-500 text-gray-900'
-                      }`}>
-                        {groupData.totals.unpaid === 0 && member.monthState.unpaid === 0 ? '✓ Paid' : '⏳ Unpaid'}
-                      </span>
+                    <div className="mb-3">
+                      <p className="font-semibold text-gray-900 dark:text-white">
+                        {member.name || member.email}
+                        {member.userId === session.user.id && <span className="text-sm text-gray-500 ml-2">(You)</span>}
+                      </p>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">{member.email}</p>
                     </div>
                     {member.monthState ? (
-                      <div className="grid grid-cols-3 gap-4 mt-3">
+                      <div className="grid grid-cols-2 gap-4">
                         <div>
                           <p className="text-xs text-gray-600 dark:text-gray-400">{t('totalMaaser')}</p>
                           <p className="text-lg font-bold text-gray-900 dark:text-white">
@@ -246,12 +237,6 @@ export default async function DashboardPage() {
                           <p className="text-xs text-gray-600 dark:text-gray-400">{t('fixedCharities')}</p>
                           <p className="text-lg font-bold text-gray-900 dark:text-white">
                             {formatCurrency(member.monthState.fixedCharitiesTotal, locale)}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-gray-600 dark:text-gray-400">{t('unpaid')}</p>
-                          <p className="text-lg font-bold text-gray-900 dark:text-white">
-                            {formatCurrency(member.monthState.unpaid, locale)}
                           </p>
                         </div>
                       </div>
