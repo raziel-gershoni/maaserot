@@ -146,19 +146,6 @@ export default async function DashboardPage() {
           <p className="text-sm sm:text-base text-gray-700 dark:text-gray-300">{t('subtitle')}</p>
         </div>
 
-        {/* Quick Actions */}
-        <div className="grid grid-cols-3 gap-2 md:gap-3 mb-4 md:mb-6">
-          <Link href="/income" className="flex items-center justify-center bg-blue-600 hover:bg-blue-700 dark:bg-blue-700 dark:hover:bg-blue-600 text-white rounded-lg p-3 md:p-4 font-semibold shadow-md transition active:scale-95 text-sm">
-            + {t('addIncome')}
-          </Link>
-          <Link href="/charities" className="flex items-center justify-center bg-green-600 hover:bg-green-700 dark:bg-green-700 dark:hover:bg-green-600 text-white rounded-lg p-3 md:p-4 font-semibold shadow-md transition active:scale-95 text-sm">
-            {t('manageCharities')}
-          </Link>
-          <Link href="/history" className="flex items-center justify-center bg-purple-600 hover:bg-purple-700 dark:bg-purple-700 dark:hover:bg-purple-600 text-white rounded-lg p-3 md:p-4 font-semibold shadow-md transition active:scale-95 text-sm">
-            {t('viewHistory')}
-          </Link>
-        </div>
-
         {/* Unified Group View - Always shown (group of 1 or N) */}
         {groupData.totals.totalMaaser > 0 ? (
           <div className="space-y-6 mb-6">
