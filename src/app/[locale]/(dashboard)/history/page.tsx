@@ -107,21 +107,21 @@ export default async function HistoryPage() {
 
                     {/* Summary Cards */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div className="bg-blue-50 dark:bg-blue-900/30 rounded-lg p-4 border border-blue-200 dark:border-blue-700">
-                        <p className="text-xs font-medium text-blue-800 dark:text-blue-200 mb-1">{t('totalMaaser')}</p>
-                        <p className="text-xl font-bold text-blue-900 dark:text-blue-100">
+                      <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+                        <p className="text-xs font-medium text-gray-800 dark:text-gray-200 mb-1">{t('totalMaaser')}</p>
+                        <p className="text-xl font-bold text-gray-900 dark:text-gray-100">
                           {formatCurrency(monthState.totalMaaser, locale)}
                         </p>
                       </div>
-                      <div className="bg-green-50 dark:bg-green-900/30 rounded-lg p-4 border border-green-200 dark:border-green-700">
-                        <p className="text-xs font-medium text-green-800 dark:text-green-200 mb-1">{t('fixedCharities')}</p>
-                        <p className="text-xl font-bold text-green-900 dark:text-green-100">
+                      <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+                        <p className="text-xs font-medium text-gray-800 dark:text-gray-200 mb-1">{t('fixedCharities')}</p>
+                        <p className="text-xl font-bold text-gray-900 dark:text-gray-100">
                           {formatCurrency(monthState.fixedCharitiesTotal, locale)}
                         </p>
                       </div>
-                      <div className="bg-indigo-50 dark:bg-indigo-900/30 rounded-lg p-4 border border-indigo-200 dark:border-indigo-700">
-                        <p className="text-xs font-medium text-indigo-800 dark:text-indigo-200 mb-1">{t('totalPaid')}</p>
-                        <p className="text-xl font-bold text-indigo-900 dark:text-indigo-100">
+                      <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+                        <p className="text-xs font-medium text-gray-800 dark:text-gray-200 mb-1">{t('totalPaid')}</p>
+                        <p className="text-xl font-bold text-gray-900 dark:text-gray-100">
                           {formatCurrency(monthState.totalPaid, locale)}
                         </p>
                       </div>
