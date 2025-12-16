@@ -137,15 +137,6 @@ export default async function DashboardPage() {
     },
   };
 
-  // Fetch user's income for display
-  const incomes = await prisma.income.findMany({
-    where: {
-      userId: session.user.id,
-      month: currentMonth,
-    },
-    orderBy: { createdAt: 'desc' },
-  });
-
   return (
     <div className="p-4 md:p-8">
       <div className="max-w-5xl mx-auto">
@@ -269,36 +260,6 @@ export default async function DashboardPage() {
             <p className="text-gray-600 dark:text-gray-400">{t('addFirstIncome')}</p>
           </div>
         )}
-
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 md:p-8 border border-gray-200 dark:border-gray-700">
-          <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">{t('recentIncome')}</h3>
-          {incomes.length > 0 ? (
-            <ul className="space-y-3">
-              {incomes.map((income) => (
-                <li key={income.id} className="border-b border-gray-200 dark:border-gray-700 pb-3 last:border-0">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <span className="text-lg font-semibold text-gray-900 dark:text-gray-100">{income.description || t('income')}</span>
-                      <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                        {t('maaser')}: {formatCurrency(income.maaser, locale)} ({income.percentage}%)
-                      </div>
-                    </div>
-                    <span className="text-xl font-bold text-gray-900 dark:text-gray-100">
-                      {formatCurrency(income.amount, locale)}
-                    </span>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <div className="text-center py-12">
-              <p className="text-gray-600 dark:text-gray-400 text-lg mb-4">{t('noIncomeThisMonth')}</p>
-              <Link href="/income" className="inline-block px-6 py-3 bg-blue-600 hover:bg-blue-700 dark:bg-blue-700 dark:hover:bg-blue-600 text-white rounded-lg font-semibold transition">
-                + {t('addFirstIncome')}
-              </Link>
-            </div>
-          )}
-        </div>
       </div>
     </div>
   );

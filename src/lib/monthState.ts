@@ -27,15 +27,14 @@ export async function calculateCurrentMonthState(userId: string, month: string) 
   let fixedCharitiesTotal = 0;
   let totalPaid = 0;
 
-  // Check if user has made any solo payments (group of 1)
-  const soloSnapshots = groupSnapshots.filter(s => s.members.length === 1);
-
-  if (soloSnapshots.length > 0) {
-    // Use first solo payment's fixed charities
-    fixedCharitiesTotal = soloSnapshots[0].totalGroupFixedCharities;
-    totalPaid = soloSnapshots.reduce((sum, s) => sum + s.groupAmountPaid, 0);
+  // Count ALL snapshots where user is a member (solo or group)
+  if (groupSnapshots.length > 0) {
+    // Use first payment's fixed charities (whether solo or group)
+    fixedCharitiesTotal = groupSnapshots[0].totalGroupFixedCharities;
+    // Sum all payments where user participated
+    totalPaid = groupSnapshots.reduce((sum, s) => sum + s.groupAmountPaid, 0);
   } else {
-    // No solo payments yet
+    // No payments yet
     fixedCharitiesTotal = fixedCharities.reduce((sum, c) => sum + c.amount, 0);
   }
 

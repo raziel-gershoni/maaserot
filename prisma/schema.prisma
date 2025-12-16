@@ -23,8 +23,6 @@ model User {
   incomes                 Income[]
   groupPaymentSnapshots   GroupPaymentSnapshot[]
   groupPaymentMemberships GroupPaymentMember[]
-  sharedWith              SharedAccess[]         @relation("owner")
-  sharedFrom              SharedAccess[]         @relation("viewer")
   partnershipsAsUser1     Partnership[]          @relation("partnership_user1")
   partnershipsAsUser2     Partnership[]          @relation("partnership_user2")
 }
@@ -89,21 +87,6 @@ model GroupPaymentMember {
 
   @@index([userId])
   @@unique([groupPaymentSnapshotId, userId])
-}
-
-model SharedAccess {
-  id         String   @id @default(cuid())
-  ownerId    String
-  owner      User     @relation("owner", fields: [ownerId], references: [id], onDelete: Cascade)
-  viewerId   String
-  viewer     User     @relation("viewer", fields: [viewerId], references: [id], onDelete: Cascade)
-  canEdit    Boolean  @default(false)
-  isSelected Boolean  @default(true)
-  createdAt  DateTime @default(now())
-
-  @@unique([ownerId, viewerId])
-  @@index([ownerId])
-  @@index([viewerId])
 }
 
 model Partnership {
