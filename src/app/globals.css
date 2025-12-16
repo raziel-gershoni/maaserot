@@ -1,26 +1,52 @@
 @import "tailwindcss";
 
+/* Maaserot – Color Scheme */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+  /* Backgrounds */
+  --bg: #FFF7F2;              /* warm off-white */
+  --surface: #FFFFFF;         /* cards / panels */
+  --surface-muted: #F6ECE7;   /* subtle separators */
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  /* Text */
+  --text-primary: #3A2A25;    /* warm charcoal */
+  --text-secondary: #6F5A52;
+  --text-disabled: #A9968F;
+
+  /* Brand */
+  --primary: #D47A5C;         /* orange-coral */
+  --primary-hover: #C96A4F;
+  --secondary: #8E4B7C;       /* soft purple */
+
+  /* Semantic */
+  --success: #4E9F7D;         /* muted green */
+  --warning: #E6A23C;         /* amber */
+  --error: #C94A4A;           /* soft red */
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --bg: #1E1412;
+    --surface: #2A1E1B;
+    --surface-muted: #3A2E2B;
+    --text-primary: #F5EDE9;
+    --text-secondary: #C9B9B2;
+    --text-disabled: #8A7A73;
+    --primary: #E08C6E;
+    --primary-hover: #D47A5C;
+    --secondary: #B07AA0;
+    --success: #5FAF8F;
+    --warning: #F0B84C;
+    --error: #D95A5A;
   }
 }
 
+@theme inline {
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
 body {
-  background: var(--background);
-  color: var(--foreground);
+  background: var(--bg);
+  color: var(--text-primary);
   font-family: Arial, Helvetica, sans-serif;
 }
