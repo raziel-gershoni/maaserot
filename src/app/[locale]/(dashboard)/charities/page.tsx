@@ -128,10 +128,10 @@ export default function CharitiesPage() {
         </div>
 
         {/* Total Monthly */}
-        <div className="bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/30 dark:to-emerald-900/30 rounded-xl shadow-lg p-6 mb-6 border-2 border-green-200 dark:border-green-700">
-          <p className="text-sm font-medium text-green-800 dark:text-green-200 mb-1">{t('totalMonthlyCommitment')}</p>
-          <p className="text-4xl font-bold text-green-900 dark:text-green-100">{formatCurrency(totalMonthly)}</p>
-          <p className="text-sm text-green-700 dark:text-green-300 mt-1">
+        <div className="bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-900/30 dark:to-purple-900/30 rounded-xl shadow-lg p-6 mb-6 border-2 border-indigo-200 dark:border-indigo-700">
+          <p className="text-sm font-medium text-indigo-800 dark:text-indigo-200 mb-1">{t('totalMonthlyCommitment')}</p>
+          <p className="text-4xl font-bold text-indigo-900 dark:text-indigo-100">{formatCurrency(totalMonthly)}</p>
+          <p className="text-sm text-indigo-700 dark:text-indigo-300 mt-1">
             {charities.filter((c) => c.isActive).length} {t('activeCharities')}
           </p>
         </div>
@@ -204,7 +204,7 @@ export default function CharitiesPage() {
                   key={charity.id}
                   className={`border-2 rounded-lg p-4 transition ${
                     charity.isActive
-                      ? 'border-green-200 dark:border-green-700 bg-green-50 dark:bg-green-900/20'
+                      ? 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900'
                       : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 opacity-60'
                   }`}
                 >
@@ -234,7 +234,7 @@ export default function CharitiesPage() {
                         className={`px-3 py-2 rounded-lg font-semibold transition ${
                           charity.isActive
                             ? 'bg-yellow-500 hover:bg-yellow-600 dark:bg-yellow-600 dark:hover:bg-yellow-500 text-white'
-                            : 'bg-green-500 hover:bg-green-600 dark:bg-green-600 dark:hover:bg-green-500 text-white'
+                            : 'bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-700 dark:hover:bg-indigo-600 text-white'
                         }`}
                       >
                         {charity.isActive ? t('pause') : t('activate')}
