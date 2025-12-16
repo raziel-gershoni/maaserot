@@ -25,6 +25,8 @@ model User {
   groupPaymentMemberships GroupPaymentMember[]
   sharedWith              SharedAccess[]         @relation("owner")
   sharedFrom              SharedAccess[]         @relation("viewer")
+  partnershipsAsUser1     Partnership[]          @relation("partnership_user1")
+  partnershipsAsUser2     Partnership[]          @relation("partnership_user2")
 }
 
 model FixedCharity {
@@ -102,4 +104,28 @@ model SharedAccess {
   @@unique([ownerId, viewerId])
   @@index([ownerId])
   @@index([viewerId])
+}
+
+model Partnership {
+  id          String            @id @default(cuid())
+  user1Id     String
+  user2Id     String
+  status      PartnershipStatus @default(PENDING)
+  initiatedBy String            // userId who created the invitation
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  user1       User              @relation("partnership_user1", fields: [user1Id], references: [id], onDelete: Cascade)
+  user2       User              @relation("partnership_user2", fields: [user2Id], references: [id], onDelete: Cascade)
+
+  @@unique([user1Id, user2Id])
+  @@index([user1Id])
+  @@index([user2Id])
+  @@index([status])
+}
+
+enum PartnershipStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
 }

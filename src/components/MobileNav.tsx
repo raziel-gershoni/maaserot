@@ -111,11 +111,11 @@ export default function MobileNav({ userEmail }: { userEmail: string }) {
               {t('history')}
             </Link>
             <Link
-              href="/shared"
+              href="/partnership"
               onClick={() => setIsOpen(false)}
               className="block px-4 py-3 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg font-medium transition"
             >
-              {t('shared')}
+              {t('partnership')}
             </Link>
             <Link
               href="/settings"

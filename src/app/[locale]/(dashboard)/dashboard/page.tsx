@@ -24,14 +24,24 @@ export default async function DashboardPage() {
 
   const locale = user?.locale || 'he';
 
-  // Check if user has selected partners for group view
-  const selectedShares = await prisma.sharedAccess.findMany({
+  // Check if user has an active partnership
+  const partnership = await prisma.partnership.findFirst({
     where: {
-      viewerId: session.user.id,
-      isSelected: true,
+      status: 'ACCEPTED',
+      OR: [
+        { user1Id: session.user.id },
+        { user2Id: session.user.id },
+      ],
     },
     include: {
-      owner: {
+      user1: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+        },
+      },
+      user2: {
         select: {
           id: true,
           name: true,
@@ -41,9 +51,13 @@ export default async function DashboardPage() {
     },
   });
 
-  const hasSelectedPartners = selectedShares.length > 0;
+  const partner = partnership
+    ? (partnership.user1Id === session.user.id ? partnership.user2 : partnership.user1)
+    : null;
 
-  // Build group data - always includes current user, plus any selected partners
+  const hasPartner = !!partner;
+
+  // Build group data - always includes current user, plus partner if exists
   const members = [];
 
   // Get current user's data
@@ -56,15 +70,15 @@ export default async function DashboardPage() {
     monthState: myMonthState,
   });
 
-  // Get selected partners' data
-  for (const share of selectedShares) {
-    const monthState = await calculateCurrentMonthState(share.owner.id, currentMonth);
+  // Add partner if exists
+  if (partner) {
+    const partnerMonthState = await calculateCurrentMonthState(partner.id, currentMonth);
 
     members.push({
-      userId: share.owner.id,
-      name: share.owner.name || '',
-      email: share.owner.email,
-      monthState,
+      userId: partner.id,
+      name: partner.name || '',
+      email: partner.email,
+      monthState: partnerMonthState,
     });
   }
 
@@ -160,7 +174,7 @@ export default async function DashboardPage() {
             {/* Combined Metrics */}
             <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 md:p-8 border border-gray-200 dark:border-gray-700">
               <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">
-                {hasSelectedPartners ? t('groupSummary') : t('currentMonth')}
+                {hasPartner ? t('groupSummary') : t('currentMonth')}
               </h2>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
@@ -203,7 +217,7 @@ export default async function DashboardPage() {
                       month={currentMonth}
                       totalUnpaid={groupData.totals.unpaid}
                       locale={locale}
-                      label={hasSelectedPartners ? t('markGroupAsPaid') : t('markAsPaid')}
+                      label={hasPartner ? t('markGroupAsPaid') : t('markAsPaid')}
                       memberIds={groupData.members.map((m: any) => m.userId)}
                     />
                   )}
@@ -211,8 +225,8 @@ export default async function DashboardPage() {
               </div>
             </div>
 
-            {/* Member Breakdown - Only show when there are multiple members */}
-            {hasSelectedPartners && (
+            {/* Member Breakdown - Only show when there is a partner */}
+            {hasPartner && (
               <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 md:p-8 border border-gray-200 dark:border-gray-700">
                 <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">{t('partnerBreakdown')}</h3>
               <div className="space-y-4">
