@@ -151,7 +151,9 @@
     "changing": "משנה...",
     "changed": "שונה!",
     "passwordChangeSuccess": "הסיסמה שונתה בהצלחה!",
-    "passwordChangeFailed": "שינוי הסיסמה נכשל"
+    "passwordChangeFailed": "שינוי הסיסמה נכשל",
+    "accountActions": "פעולות חשבון",
+    "logout": "התנתק"
   },
   "shared": {
     "title": "שיתוף",

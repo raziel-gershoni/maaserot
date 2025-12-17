@@ -151,7 +151,9 @@
     "changing": "Changing...",
     "changed": "Changed!",
     "passwordChangeSuccess": "Password changed successfully!",
-    "passwordChangeFailed": "Failed to change password"
+    "passwordChangeFailed": "Failed to change password",
+    "accountActions": "Account Actions",
+    "logout": "Logout"
   },
   "shared": {
     "title": "Sharing",

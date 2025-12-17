@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
+import { signOut } from 'next-auth/react';
+import { useRouter } from '@/i18n/routing';
 
 interface UserSettings {
   name: string;
@@ -317,6 +319,22 @@ export default function SettingsPage() {
               {passwordLoading ? t('changing') : passwordSuccess ? `✓ ${t('changed')}` : t('changePassword')}
             </button>
           </form>
+        </div>
+
+        {/* Account Actions */}
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 md:p-8 border border-gray-200 dark:border-gray-700">
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">{t('accountActions')}</h2>
+          <button
+            onClick={async () => {
+              await signOut({ callbackUrl: '/login' });
+            }}
+            className="w-full py-4 bg-red-600 hover:bg-red-700 dark:bg-red-700 dark:hover:bg-red-600 text-white rounded-lg font-bold text-lg shadow-md transition flex items-center justify-center gap-2"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            </svg>
+            {t('logout')}
+          </button>
         </div>
       </div>
     </div>
