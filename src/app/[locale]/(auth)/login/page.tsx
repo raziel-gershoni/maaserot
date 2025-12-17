@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { signIn } from 'next-auth/react';
 import { useTranslations } from 'next-intl';
 import { Link, useRouter } from '@/i18n/routing';
+import { useSearchParams } from 'next/navigation';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
 
 export default function LoginPage() {
@@ -12,8 +13,21 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
+  const searchParams = useSearchParams();
   const t = useTranslations('auth');
   const tc = useTranslations('common');
+
+  // Check for error in URL params (from NextAuth redirect)
+  useEffect(() => {
+    const errorParam = searchParams.get('error');
+    if (errorParam === 'email_not_verified') {
+      setError('Please verify your email before logging in');
+    } else if (errorParam === 'account_locked') {
+      setError('Your account is locked. Please try again later');
+    } else if (errorParam === 'CredentialsSignin') {
+      setError('Invalid email or password');
+    }
+  }, [searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -28,8 +42,19 @@ export default function LoginPage() {
       });
 
       if (result?.error) {
-        // Show the actual error message from the auth provider
-        setError(result.error);
+        // Check account status to get specific error message
+        const statusResponse = await fetch('/api/auth/check-status', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email }),
+        });
+
+        if (statusResponse.ok) {
+          const data = await statusResponse.json();
+          setError(data.message || 'Invalid email or password');
+        } else {
+          setError('Invalid email or password');
+        }
       } else {
         router.push('/');
         router.refresh();
@@ -61,10 +86,10 @@ export default function LoginPage() {
           {error && (
             <div className="bg-red-50 dark:bg-red-900/30 text-red-800 dark:text-red-200 p-3 rounded-lg border border-red-200 dark:border-red-700">
               <p>{error}</p>
-              {error.includes('verify') && (
+              {(error.includes('verify') || searchParams.get('error') === 'email_not_verified') && (
                 <div className="mt-2">
                   <Link
-                    href={`/verify-email?email=${encodeURIComponent(email)}`}
+                    href={`/verify-email?email=${encodeURIComponent(email || searchParams.get('email') || '')}`}
                     className="text-blue-600 dark:text-blue-400 hover:text-blue-500 dark:hover:text-blue-300 font-semibold underline"
                   >
                     לחץ כאן לאימות האימייל שלך

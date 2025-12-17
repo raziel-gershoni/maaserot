@@ -51,7 +51,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             userId: user.id,
             metadata: { minutesRemaining },
           });
-          throw new Error(`Account locked. Try again in ${minutesRemaining} minutes`);
+          return null;
         }
 
         const isPasswordValid = await compare(
@@ -103,7 +103,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             email: user.email,
             userId: user.id,
           });
-          throw new Error('Please verify your email before logging in');
+          return null;
         }
 
         // Reset failed login attempts on successful login
