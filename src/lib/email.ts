@@ -54,8 +54,8 @@ async function sendEmail({ to, subject, html }: SendEmailOptions): Promise<boole
 /**
  * Send email verification link
  */
-export async function sendVerificationEmail(email: string, token: string): Promise<boolean> {
-  const verificationUrl = `${APP_URL}/verify/${token}`;
+export async function sendVerificationEmail(email: string, token: string, locale: string = 'he'): Promise<boolean> {
+  const verificationUrl = `${APP_URL}/${locale}/verify/${token}`;
 
   const html = `
 <!DOCTYPE html>
@@ -93,7 +93,7 @@ export async function sendVerificationEmail(email: string, token: string): Promi
  * Send password reset email (future implementation)
  */
 export async function sendPasswordResetEmail(email: string, token: string): Promise<boolean> {
-  const resetUrl = `${APP_URL}/reset-password/${token}`;
+  const resetUrl = `${APP_URL}/he/reset-password/${token}`;
 
   const html = `
 <!DOCTYPE html>

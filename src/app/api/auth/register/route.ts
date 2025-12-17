@@ -68,8 +68,8 @@ export async function POST(request: Request) {
     // Generate verification token
     const token = await generateVerificationToken(email);
 
-    // Send verification email
-    await sendVerificationEmail(email, token);
+    // Send verification email with user's locale
+    await sendVerificationEmail(email, token, user.locale);
 
     // Log registration event
     await logAuthEventFromRequest(request, 'register', email, user.id);

@@ -56,8 +56,14 @@ export async function POST(request: Request) {
       );
     }
 
-    // Send verification email
-    const emailSent = await sendVerificationEmail(email, result.token!);
+    // Get user for locale and logging
+    const user = await prisma.user.findUnique({
+      where: { email },
+      select: { id: true, locale: true },
+    });
+
+    // Send verification email with user's locale
+    const emailSent = await sendVerificationEmail(email, result.token!, user?.locale || 'he');
 
     if (!emailSent) {
       return NextResponse.json(
@@ -65,12 +71,6 @@ export async function POST(request: Request) {
         { status: 500 }
       );
     }
-
-    // Get user ID for logging
-    const user = await prisma.user.findUnique({
-      where: { email },
-      select: { id: true },
-    });
 
     // Log resend event
     if (user) {
