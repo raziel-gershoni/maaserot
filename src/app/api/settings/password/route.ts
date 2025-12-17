@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
+import { changePasswordSchema } from '@/lib/validations/auth';
+import { checkRateLimit, resetRateLimit, RATE_LIMITS } from '@/lib/rateLimit';
+import { logAuthEventFromRequest } from '@/lib/authLogger';
 
 export async function POST(request: Request) {
   try {
@@ -11,27 +14,40 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    // Rate limiting by user ID
+    const rateLimit = checkRateLimit(session.user.id, 'password-change', RATE_LIMITS.PASSWORD_CHANGE);
+
+    if (!rateLimit.success) {
+      return NextResponse.json(
+        {
+          error: 'Too many password change attempts. Please try again later.',
+          resetAt: new Date(rateLimit.resetAt).toISOString(),
+        },
+        { status: 429 }
+      );
+    }
+
     const body = await request.json();
-    const { currentPassword, newPassword } = body;
 
-    if (!currentPassword || !newPassword) {
+    // Validate input with Zod
+    const validation = changePasswordSchema.safeParse(body);
+
+    if (!validation.success) {
       return NextResponse.json(
-        { error: 'Current password and new password are required' },
+        {
+          error: 'Validation failed',
+          details: validation.error.format()
+        },
         { status: 400 }
       );
     }
 
-    if (newPassword.length < 6) {
-      return NextResponse.json(
-        { error: 'New password must be at least 6 characters' },
-        { status: 400 }
-      );
-    }
+    const { currentPassword, newPassword } = validation.data;
 
-    // Get user with password hash
+    // Get user with password hash and email
     const user = await prisma.user.findUnique({
       where: { id: session.user.id },
-      select: { passwordHash: true },
+      select: { passwordHash: true, email: true },
     });
 
     if (!user) {
@@ -48,14 +64,20 @@ export async function POST(request: Request) {
       );
     }
 
-    // Hash new password
-    const newPasswordHash = await bcrypt.hash(newPassword, 10);
+    // Hash new password (using 12 rounds for consistency with registration)
+    const newPasswordHash = await bcrypt.hash(newPassword, 12);
 
     // Update password
     await prisma.user.update({
       where: { id: session.user.id },
       data: { passwordHash: newPasswordHash },
     });
+
+    // Log password change event
+    await logAuthEventFromRequest(request, 'password_changed', user.email || session.user.email!, session.user.id);
+
+    // Reset rate limit on successful password change
+    resetRateLimit(session.user.id, 'password-change');
 
     return NextResponse.json({ success: true });
   } catch (error) {

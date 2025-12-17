@@ -28,7 +28,8 @@ export default function LoginPage() {
       });
 
       if (result?.error) {
-        setError(t('invalidCredentials'));
+        // Show the actual error message from the auth provider
+        setError(result.error);
       } else {
         router.push('/');
         router.refresh();
@@ -58,7 +59,19 @@ export default function LoginPage() {
           </div>
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
           {error && (
-            <div className="bg-red-50 dark:bg-red-900/30 text-red-800 dark:text-red-200 p-3 rounded-lg border border-red-200 dark:border-red-700">{error}</div>
+            <div className="bg-red-50 dark:bg-red-900/30 text-red-800 dark:text-red-200 p-3 rounded-lg border border-red-200 dark:border-red-700">
+              <p>{error}</p>
+              {error.includes('verify') && (
+                <div className="mt-2">
+                  <Link
+                    href={`/verify-email?email=${encodeURIComponent(email)}`}
+                    className="text-blue-600 dark:text-blue-400 hover:text-blue-500 dark:hover:text-blue-300 font-semibold underline"
+                  >
+                    לחץ כאן לאימות האימייל שלך
+                  </Link>
+                </div>
+              )}
+            </div>
           )}
           <div className="space-y-4">
             <div>

@@ -34,7 +34,8 @@ export default function RegisterPage() {
         return;
       }
 
-      router.push('/login');
+      // Redirect to verification page with email in URL
+      router.push(`/verify-email?email=${encodeURIComponent(email)}`);
     } catch (error) {
       setError('An error occurred');
       setIsLoading(false);
@@ -95,10 +96,12 @@ export default function RegisterPage() {
                 id="password"
                 type="password"
                 required
+                minLength={8}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full px-4 py-3 bg-white dark:bg-gray-700 border-2 border-gray-400 dark:border-gray-600 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-transparent text-lg"
               />
+              <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">Minimum 8 characters</p>
             </div>
           </div>
 

@@ -102,7 +102,7 @@ export default function SettingsPage() {
       return;
     }
 
-    if (passwordForm.newPassword.length < 6) {
+    if (passwordForm.newPassword.length < 8) {
       setPasswordError(t('passwordTooShort'));
       return;
     }
@@ -287,10 +287,12 @@ export default function SettingsPage() {
                 id="newPassword"
                 type="password"
                 required
+                minLength={8}
                 value={passwordForm.newPassword}
                 onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
                 className="w-full px-4 py-3 bg-white dark:bg-gray-700 border-2 border-gray-400 dark:border-gray-600 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 focus:border-transparent text-lg"
               />
+              <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">Minimum 8 characters</p>
             </div>
 
             <div>

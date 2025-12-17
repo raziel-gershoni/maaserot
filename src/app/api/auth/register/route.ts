@@ -1,17 +1,45 @@
 import { NextResponse } from 'next/server';
 import { hash } from 'bcryptjs';
 import { prisma } from '@/lib/prisma';
+import { registerSchema } from '@/lib/validations/auth';
+import { checkRateLimit, resetRateLimit, RATE_LIMITS } from '@/lib/rateLimit';
+import { getClientIp } from '@/lib/utils/ip';
+import { generateVerificationToken } from '@/lib/tokens';
+import { sendVerificationEmail } from '@/lib/email';
+import { logAuthEventFromRequest } from '@/lib/authLogger';
 
 export async function POST(request: Request) {
   try {
-    const { name, email, password } = await request.json();
+    // Rate limiting by IP
+    const ip = getClientIp(request);
+    const rateLimit = checkRateLimit(ip, 'register', RATE_LIMITS.REGISTER);
 
-    if (!email || !password) {
+    if (!rateLimit.success) {
       return NextResponse.json(
-        { error: 'Email and password are required' },
+        {
+          error: 'Too many registration attempts. Please try again later.',
+          resetAt: new Date(rateLimit.resetAt).toISOString(),
+        },
+        { status: 429 }
+      );
+    }
+
+    const body = await request.json();
+
+    // Validate input with Zod
+    const validation = registerSchema.safeParse(body);
+
+    if (!validation.success) {
+      return NextResponse.json(
+        {
+          error: 'Validation failed',
+          details: validation.error.format()
+        },
         { status: 400 }
       );
     }
+
+    const { name, email, password } = validation.data;
 
     // Check if user already exists
     const existingUser = await prisma.user.findUnique({
@@ -28,7 +56,7 @@ export async function POST(request: Request) {
     // Hash password
     const passwordHash = await hash(password, 12);
 
-    // Create user
+    // Create user (emailVerified will be null by default)
     const user = await prisma.user.create({
       data: {
         name,
@@ -37,8 +65,26 @@ export async function POST(request: Request) {
       },
     });
 
+    // Generate verification token
+    const token = await generateVerificationToken(email);
+
+    // Send verification email
+    await sendVerificationEmail(email, token);
+
+    // Log registration event
+    await logAuthEventFromRequest(request, 'register', email, user.id);
+
+    // Log verification email sent
+    await logAuthEventFromRequest(request, 'verification_sent', email, user.id);
+
+    // Reset rate limit on successful registration
+    resetRateLimit(ip, 'register');
+
     return NextResponse.json(
-      { user: { id: user.id, email: user.email, name: user.name } },
+      {
+        user: { id: user.id, email: user.email, name: user.name },
+        message: 'Registration successful. Please check your email to verify your account.',
+      },
       { status: 201 }
     );
   } catch (error) {

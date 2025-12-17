@@ -16,6 +16,14 @@ model User {
   passwordHash   String
   defaultPercent Int      @default(10)
   locale         String   @default("he")
+
+  // Email verification
+  emailVerified  DateTime?
+
+  // Account lockout
+  failedLoginAttempts Int      @default(0)
+  lockedUntil         DateTime?
+
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -111,4 +119,31 @@ enum PartnershipStatus {
   PENDING
   ACCEPTED
   DECLINED
+}
+
+model VerificationToken {
+  id         String   @id @default(cuid())
+  email      String
+  token      String   @unique
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+
+  @@index([email])
+  @@index([token])
+}
+
+model AuthLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  email     String
+  event     String   // 'login_success', 'login_failed', 'register', etc.
+  ip        String?
+  userAgent String?
+  metadata  Json?    // Additional context
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([email])
+  @@index([event])
+  @@index([createdAt])
 }
