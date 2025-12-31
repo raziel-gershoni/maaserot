@@ -257,9 +257,9 @@ describe('Group Payment Integration Tests', () => {
       expect(snapshot1.totalGroupFixedCharities).toBe(500); // User 1's first
       expect(snapshot2.totalGroupFixedCharities).toBe(200); // User 2's first
 
-      // Verify: User 1 has total paid = 1000 (solo only, group payment not counted in solo view)
+      // Verify: User 1 has total paid = 4300 (1000 solo + 3300 group)
       const state1Final = await getMonthState(user1.id, TEST_MONTH);
-      expect(state1Final.totalPaid).toBe(1000);
+      expect(state1Final.totalPaid).toBe(4300);
       expect(state1Final.snapshots).toHaveLength(2); // Participated in both
     });
   });
