@@ -108,7 +108,12 @@
     "pause": "Pause",
     "activate": "Activate",
     "delete": "Delete",
-    "deleteConfirm": "Are you sure you want to delete this charity?"
+    "deleteConfirm": "Are you sure you want to delete this charity?",
+    "edit": "Edit",
+    "editCharity": "Edit Fixed Charity",
+    "save": "Save",
+    "saving": "Saving...",
+    "cancel": "Cancel"
   },
   "history": {
     "title": "History",

@@ -18,6 +18,12 @@ export default function CharitiesPage() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
 
+  // Edit state
+  const [editingCharity, setEditingCharity] = useState<Charity | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editAmount, setEditAmount] = useState('');
+  const [isEditing, setIsEditing] = useState(false);
+
   const t = useTranslations('charities');
 
   useEffect(() => {
@@ -93,7 +99,7 @@ export default function CharitiesPage() {
   };
 
   const deleteCharity = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this charity?')) {
+    if (!confirm(t('deleteConfirm'))) {
       return;
     }
 
@@ -107,6 +113,48 @@ export default function CharitiesPage() {
       }
     } catch (error) {
       console.error('Failed to delete charity:', error);
+    }
+  };
+
+  const openEdit = (charity: Charity) => {
+    setEditingCharity(charity);
+    setEditName(charity.name);
+    setEditAmount((charity.amount / 100).toString());
+  };
+
+  const closeEdit = () => {
+    setEditingCharity(null);
+    setEditName('');
+    setEditAmount('');
+  };
+
+  const handleEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingCharity) return;
+
+    setIsEditing(true);
+
+    try {
+      const amountInAgorot = Math.round(parseFloat(editAmount) * 100);
+
+      const response = await fetch('/api/charities', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: editingCharity.id,
+          name: editName,
+          amount: amountInAgorot,
+        }),
+      });
+
+      if (response.ok) {
+        fetchCharities();
+        closeEdit();
+      }
+    } catch (error) {
+      console.error('Failed to edit charity:', error);
+    } finally {
+      setIsEditing(false);
     }
   };
 
@@ -230,6 +278,15 @@ export default function CharitiesPage() {
                     </div>
                     <div className="flex gap-2">
                       <button
+                        onClick={() => openEdit(charity)}
+                        className="px-3 py-2 bg-gray-500 hover:bg-gray-600 dark:bg-gray-600 dark:hover:bg-gray-500 text-white rounded-lg font-semibold transition"
+                        title={t('edit')}
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                        </svg>
+                      </button>
+                      <button
                         onClick={() => toggleActive(charity.id, charity.isActive)}
                         className={`px-3 py-2 rounded-lg font-semibold transition ${
                           charity.isActive
@@ -258,6 +315,63 @@ export default function CharitiesPage() {
           )}
         </div>
       </div>
+
+      {/* Edit Modal */}
+      {editingCharity && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl p-6 w-full max-w-md border border-gray-200 dark:border-gray-700">
+            <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">{t('editCharity')}</h3>
+
+            <form onSubmit={handleEdit} className="space-y-4">
+              <div>
+                <label htmlFor="editName" className="block text-sm font-bold text-gray-900 dark:text-gray-100 mb-2">
+                  {t('name')}
+                </label>
+                <input
+                  id="editName"
+                  type="text"
+                  required
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  className="w-full px-4 py-3 bg-white dark:bg-gray-700 border-2 border-gray-400 dark:border-gray-600 text-gray-900 dark:text-gray-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 focus:border-transparent text-lg"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="editAmount" className="block text-sm font-bold text-gray-900 dark:text-gray-100 mb-2">
+                  {t('amount')} (₪)
+                </label>
+                <input
+                  id="editAmount"
+                  type="number"
+                  step="0.01"
+                  required
+                  value={editAmount}
+                  onChange={(e) => setEditAmount(e.target.value)}
+                  className="w-full px-4 py-3 bg-white dark:bg-gray-700 border-2 border-gray-400 dark:border-gray-600 text-gray-900 dark:text-gray-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 focus:border-transparent text-lg"
+                />
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={closeEdit}
+                  className="flex-1 py-3 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 rounded-lg font-bold transition"
+                >
+                  {t('cancel')}
+                </button>
+                <button
+                  type="submit"
+                  disabled={isEditing}
+                  className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-700 dark:hover:bg-indigo-600 text-white rounded-lg font-bold transition disabled:opacity-50"
+                >
+                  {isEditing ? t('saving') : t('save')}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
