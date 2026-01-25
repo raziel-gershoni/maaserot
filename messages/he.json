@@ -61,7 +61,15 @@
     "markGroupAsPaid": "סמן קבוצה כשולם",
     "payInAdvance": "שלם מראש",
     "payGroupInAdvance": "שלם מראש לקבוצה",
-    "advancePaymentCredit": "תשלום מראש - הזיכוי יחול על הכנסות עתידיות החודש"
+    "advancePaymentCredit": "תשלום מראש - הזיכוי יחול על הכנסות עתידיות החודש",
+    "paymentAmount": "סכום לתשלום",
+    "groupPayment": "תשלום קבוצתי",
+    "groupPaymentDescription": "התשלום יחולק באופן יחסי בין כל חברי הקבוצה לפי הסכום שלא שולם של כל אחד.",
+    "amountToPay": "סכום לתשלום:",
+    "cancel": "ביטול",
+    "processing": "מעבד...",
+    "confirmPayment": "אשר תשלום",
+    "creditMessage": "זיכוי של {amount} יחול על הכנסות עתידיות החודש"
   },
   "income": {
     "title": "הכנסות",

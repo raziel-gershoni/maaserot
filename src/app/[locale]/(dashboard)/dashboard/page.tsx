@@ -17,6 +17,18 @@ export default async function DashboardPage() {
   const t = await getTranslations('dashboard');
   const currentMonth = getCurrentMonth();
 
+  // Prepare translations for client components (will be finalized after hasPartner is known)
+  const getPaymentModalTranslations = (isGroup: boolean) => ({
+    title: isGroup ? t('groupPayment') : t('paymentAmount'),
+    description: t('groupPaymentDescription'),
+    amountToPay: t('amountToPay'),
+    cancel: t('cancel'),
+    processing: t('processing'),
+    confirmPayment: t('confirmPayment'),
+    advancePaymentCredit: t('advancePaymentCredit'),
+    creditMessage: t('creditMessage'),
+  });
+
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
     select: { locale: true, name: true },
@@ -199,6 +211,7 @@ export default async function DashboardPage() {
                       : (hasPartner ? t('payGroupInAdvance') : t('payInAdvance'))
                     }
                     memberIds={groupData.members.map((m: any) => m.userId)}
+                    translations={getPaymentModalTranslations(hasPartner)}
                   />
                 </div>
               </div>
@@ -252,6 +265,7 @@ export default async function DashboardPage() {
               locale={locale}
               label={hasPartner ? t('payGroupInAdvance') : t('payInAdvance')}
               memberIds={groupData.members.map((m: any) => m.userId)}
+              translations={getPaymentModalTranslations(hasPartner)}
             />
           </div>
         )}

@@ -61,7 +61,15 @@
     "markGroupAsPaid": "Mark Group as Paid",
     "payInAdvance": "Pay in Advance",
     "payGroupInAdvance": "Pay Group in Advance",
-    "advancePaymentCredit": "Advance payment - credit will apply to future income this month"
+    "advancePaymentCredit": "Advance payment - credit will apply to future income this month",
+    "paymentAmount": "Payment Amount",
+    "groupPayment": "Group Payment",
+    "groupPaymentDescription": "Payment will be distributed proportionally across all group members based on their individual unpaid amounts.",
+    "amountToPay": "Amount to pay:",
+    "cancel": "Cancel",
+    "processing": "Processing...",
+    "confirmPayment": "Confirm Payment",
+    "creditMessage": "Credit of {amount} will apply to future income this month"
   },
   "income": {
     "title": "Income",
