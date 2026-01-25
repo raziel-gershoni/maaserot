@@ -18,6 +18,13 @@ export default function PaymentModal({ month, unpaidAmount, locale, label, userI
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
 
+  // Handle advance payments (when unpaidAmount = 0)
+  const isAdvancePayment = unpaidAmount === 0;
+  // Allow overpayment - slider max is 2x unpaid, buttons can go higher
+  // For advance payments, provide a reasonable range (10000 agorot = 100 shekel)
+  const sliderMax = isAdvancePayment ? 10000 : Math.max(unpaidAmount * 2, unpaidAmount + 10000);
+  const overpaymentAmount = Math.max(0, paymentAmount - unpaidAmount);
+
   const handlePayment = async () => {
     if (paymentAmount <= 0) return;
 
@@ -50,7 +57,8 @@ export default function PaymentModal({ month, unpaidAmount, locale, label, userI
   };
 
   const handleOpenModal = () => {
-    setPaymentAmount(unpaidAmount); // Reset to max when opening
+    // For advance payments (unpaidAmount = 0), start at 0; otherwise reset to unpaid amount
+    setPaymentAmount(isAdvancePayment ? 0 : unpaidAmount);
     setIsOpen(true);
   };
 
@@ -87,9 +95,8 @@ export default function PaymentModal({ month, unpaidAmount, locale, label, userI
                   </span>
                   <button
                     type="button"
-                    onClick={() => setPaymentAmount(Math.min(unpaidAmount, paymentAmount + 100))}
-                    disabled={paymentAmount >= unpaidAmount}
-                    className="w-12 h-12 flex items-center justify-center bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-900 dark:text-white rounded-lg font-bold text-2xl disabled:opacity-30 disabled:cursor-not-allowed transition active:scale-95"
+                    onClick={() => setPaymentAmount(paymentAmount + 100)}
+                    className="w-12 h-12 flex items-center justify-center bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-900 dark:text-white rounded-lg font-bold text-2xl transition active:scale-95"
                   >
                     ↑
                   </button>
@@ -99,9 +106,9 @@ export default function PaymentModal({ month, unpaidAmount, locale, label, userI
               <input
                 type="range"
                 min="0"
-                max={unpaidAmount}
+                max={sliderMax}
                 step="100"
-                value={paymentAmount}
+                value={Math.min(paymentAmount, sliderMax)}
                 onChange={(e) => setPaymentAmount(parseInt(e.target.value))}
                 className="w-full h-4 md:h-3 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-indigo-600 touch-none"
                 style={{ WebkitTapHighlightColor: 'transparent' }}
@@ -111,6 +118,21 @@ export default function PaymentModal({ month, unpaidAmount, locale, label, userI
                 <span>{formatCurrency(0, locale)}</span>
                 <span>{formatCurrency(unpaidAmount, locale)}</span>
               </div>
+
+              {(isAdvancePayment || overpaymentAmount > 0) && (
+                <div className="mt-3 p-2 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-lg">
+                  <p className="text-sm text-blue-700 dark:text-blue-300 text-center">
+                    {isAdvancePayment
+                      ? (locale === 'he'
+                          ? 'תשלום מראש - הזיכוי יחול על הכנסות עתידיות החודש'
+                          : 'Advance payment - credit will apply to future income this month')
+                      : (locale === 'he'
+                          ? `זיכוי של ${formatCurrency(overpaymentAmount, locale)} יחול על הכנסות עתידיות החודש`
+                          : `Credit of ${formatCurrency(overpaymentAmount, locale)} will apply to future income this month`)
+                    }
+                  </p>
+                </div>
+              )}
             </div>
 
             <div className="flex gap-3">

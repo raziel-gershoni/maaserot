@@ -190,15 +190,16 @@ export default async function DashboardPage() {
                   }`}>
                     {groupData.totals.unpaid === 0 ? '✓ ' + t('paid') : '⏳ ' + t('unpaid')}
                   </span>
-                  {groupData.totals.unpaid > 0 && (
-                    <GroupPaymentModal
-                      month={currentMonth}
-                      totalUnpaid={groupData.totals.unpaid}
-                      locale={locale}
-                      label={hasPartner ? t('markGroupAsPaid') : t('markAsPaid')}
-                      memberIds={groupData.members.map((m: any) => m.userId)}
-                    />
-                  )}
+                  <GroupPaymentModal
+                    month={currentMonth}
+                    totalUnpaid={groupData.totals.unpaid}
+                    locale={locale}
+                    label={groupData.totals.unpaid > 0
+                      ? (hasPartner ? t('markGroupAsPaid') : t('markAsPaid'))
+                      : (hasPartner ? t('payGroupInAdvance') : t('payInAdvance'))
+                    }
+                    memberIds={groupData.members.map((m: any) => m.userId)}
+                  />
                 </div>
               </div>
             </div>
@@ -244,7 +245,14 @@ export default async function DashboardPage() {
         ) : (
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-8 mb-6 border border-gray-200 dark:border-gray-700 text-center">
             <p className="text-xl text-gray-700 dark:text-gray-300 mb-4">{t('nothingToPay')}</p>
-            <p className="text-gray-600 dark:text-gray-400">{t('addFirstIncome')}</p>
+            <p className="text-gray-600 dark:text-gray-400 mb-6">{t('addFirstIncome')}</p>
+            <GroupPaymentModal
+              month={currentMonth}
+              totalUnpaid={0}
+              locale={locale}
+              label={hasPartner ? t('payGroupInAdvance') : t('payInAdvance')}
+              memberIds={groupData.members.map((m: any) => m.userId)}
+            />
           </div>
         )}
       </div>

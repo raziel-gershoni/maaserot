@@ -58,7 +58,10 @@
     "groupView": "תצוגת קבוצה",
     "groupSummary": "סיכום קבוצתי",
     "partnerBreakdown": "פירוט שותפים",
-    "markGroupAsPaid": "סמן קבוצה כשולם"
+    "markGroupAsPaid": "סמן קבוצה כשולם",
+    "payInAdvance": "שלם מראש",
+    "payGroupInAdvance": "שלם מראש לקבוצה",
+    "advancePaymentCredit": "תשלום מראש - הזיכוי יחול על הכנסות עתידיות החודש"
   },
   "income": {
     "title": "הכנסות",

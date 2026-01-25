@@ -58,7 +58,10 @@
     "groupView": "Group View",
     "groupSummary": "Group Summary",
     "partnerBreakdown": "Partner Breakdown",
-    "markGroupAsPaid": "Mark Group as Paid"
+    "markGroupAsPaid": "Mark Group as Paid",
+    "payInAdvance": "Pay in Advance",
+    "payGroupInAdvance": "Pay Group in Advance",
+    "advancePaymentCredit": "Advance payment - credit will apply to future income this month"
   },
   "income": {
     "title": "Income",
