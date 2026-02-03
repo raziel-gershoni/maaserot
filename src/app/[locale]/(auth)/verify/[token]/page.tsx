@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useTranslations } from 'next-intl';
 import { Link } from '@/i18n/routing';
 import { useParams } from 'next/navigation';
@@ -9,16 +9,16 @@ import LanguageSwitcher from '@/components/LanguageSwitcher';
 export default function VerifyTokenPage() {
   const params = useParams();
   const token = params.token as string;
-  const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
-  const [error, setError] = useState('');
+  const isValidToken = useMemo(() => !!token, [token]);
+  const [status, setStatus] = useState<'loading' | 'success' | 'error'>(
+    isValidToken ? 'loading' : 'error'
+  );
+  const [errorMessage, setErrorMessage] = useState(isValidToken ? '' : 'Invalid verification link');
   const [email, setEmail] = useState('');
-  const t = useTranslations('auth');
   const tc = useTranslations('common');
 
   useEffect(() => {
-    if (!token) {
-      setStatus('error');
-      setError('Invalid verification link');
+    if (!isValidToken) {
       return;
     }
 
@@ -29,20 +29,20 @@ export default function VerifyTokenPage() {
 
         if (!response.ok) {
           setStatus('error');
-          setError(data.error || 'Verification failed');
+          setErrorMessage(data.error || 'Verification failed');
           return;
         }
 
         setStatus('success');
         setEmail(data.email || '');
-      } catch (error) {
+      } catch {
         setStatus('error');
-        setError('An error occurred during verification');
+        setErrorMessage('An error occurred during verification');
       }
     };
 
     verifyEmail();
-  }, [token]);
+  }, [token, isValidToken]);
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -105,7 +105,7 @@ export default function VerifyTokenPage() {
               </div>
               <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">האימות נכשל</h2>
               <div className="bg-red-50 dark:bg-red-900/30 text-red-800 dark:text-red-200 p-4 rounded-lg border border-red-200 dark:border-red-700 mb-6">
-                {error}
+                {errorMessage}
               </div>
               <p className="text-gray-600 dark:text-gray-400 text-sm mb-8">
                 הקישור עשוי להיות לא תקף או שפג תוקפו.

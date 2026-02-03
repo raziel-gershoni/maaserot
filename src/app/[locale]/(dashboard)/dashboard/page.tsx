@@ -4,8 +4,21 @@ import { prisma } from '@/lib/prisma';
 import { getCurrentMonth, formatCurrency } from '@/lib/calculations';
 import { calculateCurrentMonthState } from '@/lib/monthState';
 import { getTranslations } from 'next-intl/server';
-import { Link } from '@/i18n/routing';
 import GroupPaymentModal from '@/components/GroupPaymentModal';
+
+interface MonthState {
+  totalMaaser: number;
+  fixedCharitiesTotal: number;
+  totalPaid: number;
+  unpaid: number;
+}
+
+interface GroupMember {
+  userId: string;
+  name: string;
+  email: string;
+  monthState: MonthState;
+}
 
 export default async function DashboardPage() {
   const session = await auth();
@@ -210,7 +223,7 @@ export default async function DashboardPage() {
                       ? (hasPartner ? t('markGroupAsPaid') : t('markAsPaid'))
                       : (hasPartner ? t('payGroupInAdvance') : t('payInAdvance'))
                     }
-                    memberIds={groupData.members.map((m: any) => m.userId)}
+                    memberIds={groupData.members.map((m: GroupMember) => m.userId)}
                     translations={getPaymentModalTranslations(hasPartner)}
                   />
                 </div>
@@ -222,7 +235,7 @@ export default async function DashboardPage() {
               <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 md:p-8 border border-gray-200 dark:border-gray-700">
                 <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">{t('partnerBreakdown')}</h3>
               <div className="space-y-4">
-                {groupData.members.map((member: any) => (
+                {groupData.members.map((member: GroupMember) => (
                   <div key={member.userId} className="p-4 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700">
                     <div className="mb-3">
                       <p className="font-semibold text-gray-900 dark:text-white">
@@ -264,7 +277,7 @@ export default async function DashboardPage() {
               totalUnpaid={0}
               locale={locale}
               label={hasPartner ? t('payGroupInAdvance') : t('payInAdvance')}
-              memberIds={groupData.members.map((m: any) => m.userId)}
+              memberIds={groupData.members.map((m: GroupMember) => m.userId)}
               translations={getPaymentModalTranslations(hasPartner)}
             />
           </div>

@@ -36,7 +36,7 @@ export default function RegisterPage() {
 
       // Redirect to verification page with email in URL
       router.push(`/verify-email?email=${encodeURIComponent(email)}`);
-    } catch (error) {
+    } catch {
       setError('An error occurred');
       setIsLoading(false);
     }

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, Suspense } from 'react';
 import { useTranslations } from 'next-intl';
-import { Link, useRouter } from '@/i18n/routing';
+import { Link } from '@/i18n/routing';
 import { useSearchParams } from 'next/navigation';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
 
@@ -15,7 +15,6 @@ function VerifyEmailContent() {
   const [isLoading, setIsLoading] = useState(false);
   const [canResend, setCanResend] = useState(true);
   const [countdown, setCountdown] = useState(0);
-  const t = useTranslations('auth');
   const tc = useTranslations('common');
 
   // Countdown timer for resend cooldown
@@ -57,7 +56,7 @@ function VerifyEmailContent() {
 
       setMessage('Verification email sent! Please check your inbox.');
       setCountdown(60); // 60 second cooldown
-    } catch (error) {
+    } catch {
       setError('An error occurred while sending the email');
       setCanResend(true);
     } finally {

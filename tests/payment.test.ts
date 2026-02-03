@@ -277,7 +277,7 @@ describe('Group Payment Integration Tests', () => {
       expect(stateBefore.unpaid).toBe(1800);
 
       // Action 1: Make partial payment of 900 (50%)
-      const snapshot1 = await prisma.groupPaymentSnapshot.create({
+      await prisma.groupPaymentSnapshot.create({
         data: {
           month: TEST_MONTH,
           groupOwnerId: user.id,
@@ -310,7 +310,7 @@ describe('Group Payment Integration Tests', () => {
       expect(stateAfterPartial.unpaid).toBe(900);
 
       // Action 2: Make second payment to complete (900)
-      const snapshot2 = await prisma.groupPaymentSnapshot.create({
+      await prisma.groupPaymentSnapshot.create({
         data: {
           month: TEST_MONTH,
           groupOwnerId: user.id,

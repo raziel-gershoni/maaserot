@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
 import { signOut } from 'next-auth/react';
-import { useRouter } from '@/i18n/routing';
 
 interface UserSettings {
   name: string;
@@ -87,7 +86,7 @@ export default function SettingsPage() {
       } else {
         setTimeout(() => setSuccess(false), 3000);
       }
-    } catch (error) {
+    } catch {
       setError(t('errorOccurred'));
     } finally {
       setIsSaving(false);
@@ -131,7 +130,7 @@ export default function SettingsPage() {
       setPasswordSuccess(true);
       setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
       setTimeout(() => setPasswordSuccess(false), 3000);
-    } catch (error) {
+    } catch {
       setPasswordError(t('errorOccurred'));
     } finally {
       setPasswordLoading(false);

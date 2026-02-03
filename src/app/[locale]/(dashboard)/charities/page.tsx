@@ -72,7 +72,7 @@ export default function CharitiesPage() {
       setAmount('');
       fetchCharities();
       setTimeout(() => setSuccess(false), 3000);
-    } catch (error) {
+    } catch {
       setError('An error occurred');
     } finally {
       setIsLoading(false);

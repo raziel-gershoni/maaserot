@@ -4,6 +4,16 @@ import { useState, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
 import { useRouter } from '@/i18n/routing';
 
+interface Income {
+  id: string;
+  amount: number;
+  percentage: number;
+  maaser: number;
+  description: string | null;
+  isFrozen: boolean;
+  createdAt: string;
+}
+
 export default function IncomePage() {
   const [amount, setAmount] = useState('');
   const [percentage, setPercentage] = useState('10');
@@ -11,7 +21,7 @@ export default function IncomePage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
-  const [incomes, setIncomes] = useState<any[]>([]);
+  const [incomes, setIncomes] = useState<Income[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editAmount, setEditAmount] = useState('');
   const [editPercentage, setEditPercentage] = useState('');
@@ -84,14 +94,14 @@ export default function IncomePage() {
       setTimeout(() => {
         router.push('/dashboard');
       }, 1500);
-    } catch (error) {
+    } catch {
       setError('An error occurred');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const startEdit = (income: any) => {
+  const startEdit = (income: Income) => {
     setEditingId(income.id);
     setEditAmount((income.amount / 100).toString());
     setEditPercentage(income.percentage.toString());

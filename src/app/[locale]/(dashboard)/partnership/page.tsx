@@ -37,6 +37,7 @@ export default function PartnershipPage() {
 
   useEffect(() => {
     fetchPartnerships();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const fetchPartnerships = async () => {
@@ -115,7 +116,7 @@ export default function PartnershipPage() {
       setEmail('');
       fetchPartnerships();
       setTimeout(() => setSuccess(false), 3000);
-    } catch (error) {
+    } catch {
       setError(t('errorOccurred'));
     } finally {
       setIsLoading(false);

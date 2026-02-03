@@ -4,7 +4,7 @@ import { NextRequest } from 'next/server';
 
 const middleware = createMiddleware(routing);
 
-export default function (request: NextRequest) {
+export default function localeMiddleware(request: NextRequest) {
   // Check for locale cookie
   const localeCookie = request.cookies.get('NEXT_LOCALE');
 
