@@ -139,7 +139,11 @@
     "unpaid": "Unpaid",
     "paidOn": "Paid on",
     "noHistory": "No history yet",
-    "addFirstIncomeToTrack": "Add your first income to start tracking your maaser history"
+    "addFirstIncomeToTrack": "Add your first income to start tracking your maaser history",
+    "payments": "Payments",
+    "soloPayment": "Solo",
+    "groupPaymentWith": "with {names}",
+    "noPaymentsYet": "No payments yet"
   },
   "settings": {
     "title": "Settings",

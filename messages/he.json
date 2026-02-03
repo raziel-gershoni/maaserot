@@ -139,7 +139,11 @@
     "unpaid": "לא שולם",
     "paidOn": "שולם ב",
     "noHistory": "אין עדיין היסטוריה",
-    "addFirstIncomeToTrack": "הוסף את ההכנסה הראשונה שלך כדי להתחיל לעקוב אחר היסטוריית המעשר שלך"
+    "addFirstIncomeToTrack": "הוסף את ההכנסה הראשונה שלך כדי להתחיל לעקוב אחר היסטוריית המעשר שלך",
+    "payments": "תשלומים",
+    "soloPayment": "אישי",
+    "groupPaymentWith": "עם {names}",
+    "noPaymentsYet": "אין תשלומים עדיין"
   },
   "settings": {
     "title": "הגדרות",

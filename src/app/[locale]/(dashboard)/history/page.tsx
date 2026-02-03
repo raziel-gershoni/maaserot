@@ -44,6 +44,28 @@ export default async function HistoryPage() {
     })
   );
 
+  // Collect all unique member IDs from all snapshots
+  const allMemberIds = new Set<string>();
+  for (const monthState of monthStates) {
+    for (const snapshot of monthState.snapshots) {
+      for (const member of snapshot.members) {
+        allMemberIds.add(member.userId);
+      }
+    }
+  }
+
+  // Fetch all member names in a single query
+  const members = await prisma.user.findMany({
+    where: { id: { in: Array.from(allMemberIds) } },
+    select: { id: true, name: true, email: true }
+  });
+
+  // Build a map of userId -> display name
+  const memberNameMap = new Map<string, string>();
+  for (const member of members) {
+    memberNameMap.set(member.id, member.name || member.email);
+  }
+
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
     select: { locale: true },
@@ -72,11 +94,6 @@ export default async function HistoryPage() {
           {monthStates.length > 0 ? (
             <div className="space-y-4">
               {monthStates.map((monthState) => {
-                // Get latest payment date
-                const latestSnapshot = monthState.snapshots.length > 0
-                  ? monthState.snapshots[monthState.snapshots.length - 1]
-                  : null;
-
                 return (
                   <div
                     key={monthState.month}
@@ -98,11 +115,6 @@ export default async function HistoryPage() {
                           {monthState.unpaid === 0 ? `✓ ${t('paid')}` : `⏳ ${t('unpaid')}`}
                         </span>
                       </div>
-                      {latestSnapshot && (
-                        <p className="text-sm text-gray-600 dark:text-gray-400">
-                          {t('paidOn')} {new Date(latestSnapshot.paidAt).toLocaleDateString(locale)}
-                        </p>
-                      )}
                     </div>
 
                     {/* Summary Cards */}
@@ -125,6 +137,55 @@ export default async function HistoryPage() {
                           {formatCurrency(monthState.totalPaid, locale)}
                         </p>
                       </div>
+                    </div>
+
+                    {/* Payment History */}
+                    <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                      <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+                        {t('payments')}
+                      </h4>
+                      {monthState.snapshots.length > 0 ? (
+                        <div className="space-y-2">
+                          {monthState.snapshots.map((snapshot) => {
+                            const isSolo = snapshot.members.length === 1;
+                            const otherMembers = snapshot.members
+                              .filter(m => m.userId !== session.user.id)
+                              .map(m => memberNameMap.get(m.userId) || 'Unknown');
+
+                            return (
+                              <div
+                                key={snapshot.id}
+                                className="flex items-center justify-between bg-white dark:bg-gray-800 rounded-lg px-4 py-2 border border-gray-200 dark:border-gray-600"
+                              >
+                                <div className="flex items-center gap-3">
+                                  <span className="text-base font-semibold text-gray-900 dark:text-gray-100">
+                                    {formatCurrency(snapshot.groupAmountPaid, locale)}
+                                  </span>
+                                  <span className={`text-xs px-2 py-0.5 rounded-full ${
+                                    isSolo
+                                      ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
+                                      : 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300'
+                                  }`}>
+                                    {isSolo
+                                      ? t('soloPayment')
+                                      : t('groupPaymentWith', { names: otherMembers.join(', ') })}
+                                  </span>
+                                </div>
+                                <span className="text-sm text-gray-500 dark:text-gray-400">
+                                  {new Date(snapshot.paidAt).toLocaleDateString(locale, {
+                                    day: 'numeric',
+                                    month: 'short'
+                                  })}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-gray-500 dark:text-gray-400 italic">
+                          {t('noPaymentsYet')}
+                        </p>
+                      )}
                     </div>
                   </div>
                 );
