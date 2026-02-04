@@ -143,7 +143,11 @@
     "payments": "Payments",
     "soloPayment": "Solo",
     "groupPaymentWith": "with {names}",
-    "noPaymentsYet": "No payments yet"
+    "noPaymentsYet": "No payments yet",
+    "groupMembers": "Group Members",
+    "you": "You",
+    "groupTotal": "Group Total",
+    "remaining": "remaining"
   },
   "settings": {
     "title": "Settings",

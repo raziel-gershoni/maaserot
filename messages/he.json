@@ -143,7 +143,11 @@
     "payments": "תשלומים",
     "soloPayment": "אישי",
     "groupPaymentWith": "עם {names}",
-    "noPaymentsYet": "אין תשלומים עדיין"
+    "noPaymentsYet": "אין תשלומים עדיין",
+    "groupMembers": "חברי הקבוצה",
+    "you": "אתה",
+    "groupTotal": "סה\"כ קבוצה",
+    "remaining": "נותר"
   },
   "settings": {
     "title": "הגדרות",
