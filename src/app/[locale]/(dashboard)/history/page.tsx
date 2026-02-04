@@ -96,6 +96,7 @@ export default async function HistoryPage() {
     you: t('you'),
     groupTotal: t('groupTotal'),
     totalMaaser: t('totalMaaser'),
+    totalPaid: t('totalPaid'),
     fixedCharities: t('fixedCharities'),
     payments: t('payments'),
     soloPayment: t('soloPayment'),

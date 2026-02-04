@@ -44,6 +44,7 @@ interface HistoryListProps {
     you: string;
     groupTotal: string;
     totalMaaser: string;
+    totalPaid: string;
     fixedCharities: string;
     payments: string;
     soloPayment: string;
@@ -157,18 +158,31 @@ export default function HistoryList({
                 </div>
               </div>
 
-              <div className="flex items-center gap-3">
-                <span
-                  className={`text-lg font-semibold ${
-                    monthState.unpaid === 0
-                      ? 'text-green-600 dark:text-green-400'
-                      : 'text-amber-600 dark:text-amber-400'
-                  }`}
-                >
-                  {monthState.unpaid === 0
-                    ? `✓ ${t.paid}`
-                    : `${formatCurrency(monthState.unpaid, locale)} ${t.remaining}`}
-                </span>
+              <div className="flex items-center gap-4">
+                {/* Total Paid */}
+                <div className="text-right">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">{t.totalPaid}</p>
+                  <p className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                    {formatCurrency(monthState.totalPaid, locale)}
+                  </p>
+                </div>
+
+                {/* Remaining / Status */}
+                <div className="text-right">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">{t.remaining}</p>
+                  <p
+                    className={`text-lg font-semibold ${
+                      monthState.unpaid === 0
+                        ? 'text-green-600 dark:text-green-400'
+                        : 'text-amber-600 dark:text-amber-400'
+                    }`}
+                  >
+                    {monthState.unpaid === 0
+                      ? `✓ ${t.paid}`
+                      : formatCurrency(monthState.unpaid, locale)}
+                  </p>
+                </div>
+
                 <span
                   className={`px-2.5 py-1 rounded-full text-xs font-bold ${
                     monthState.unpaid === 0
