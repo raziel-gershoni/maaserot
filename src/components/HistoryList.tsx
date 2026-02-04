@@ -50,7 +50,7 @@ interface HistoryListProps {
     groupPaymentWith: string;
     noPaymentsYet: string;
   };
-  formatMonth: (month: string) => string;
+  formattedMonths: Record<string, string>;
 }
 
 export default function HistoryList({
@@ -59,7 +59,7 @@ export default function HistoryList({
   currentUserId,
   locale,
   translations: t,
-  formatMonth,
+  formattedMonths,
 }: HistoryListProps) {
   const [expandedMonths, setExpandedMonths] = useState<Set<string>>(new Set());
 
@@ -147,7 +147,7 @@ export default function HistoryList({
 
                 <div>
                   <h3 className="text-xl font-bold text-gray-900 dark:text-white">
-                    {formatMonth(monthState.month)}
+                    {formattedMonths[monthState.month] || monthState.month}
                   </h3>
                   {hasGroup && partnerNames.length > 0 && (
                     <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">

@@ -134,7 +134,7 @@ export default async function HistoryPage() {
               currentUserId={session.user.id}
               locale={locale}
               translations={translations}
-              formatMonth={(month) => formattedMonths[month] || month}
+              formattedMonths={formattedMonths}
             />
           ) : (
             <div className="text-center py-12">
