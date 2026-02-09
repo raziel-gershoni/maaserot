@@ -29,6 +29,7 @@ interface MonthState {
   fixedCharitiesTotal: number;
   totalPaid: number;
   unpaid: number;
+  hasPayments: boolean;
   snapshots: GroupPaymentSnapshot[];
 }
 
@@ -168,30 +169,37 @@ export default function HistoryList({
                 </div>
 
                 {/* Remaining / Status */}
-                <div className="text-right">
-                  <p className="text-xs text-gray-500 dark:text-gray-400">{t.remaining}</p>
-                  <p
-                    className={`text-lg font-semibold ${
-                      monthState.unpaid === 0
-                        ? 'text-green-600 dark:text-green-400'
-                        : 'text-amber-600 dark:text-amber-400'
-                    }`}
-                  >
-                    {monthState.unpaid === 0
-                      ? `✓ ${t.paid}`
-                      : formatCurrency(monthState.unpaid, locale)}
-                  </p>
-                </div>
+                {(() => {
+                  const isPaid = monthState.unpaid === 0 && monthState.hasPayments;
+                  return (
+                    <>
+                      <div className="text-right">
+                        <p className="text-xs text-gray-500 dark:text-gray-400">{t.remaining}</p>
+                        <p
+                          className={`text-lg font-semibold ${
+                            isPaid
+                              ? 'text-green-600 dark:text-green-400'
+                              : 'text-amber-600 dark:text-amber-400'
+                          }`}
+                        >
+                          {isPaid
+                            ? `✓ ${t.paid}`
+                            : formatCurrency(monthState.unpaid, locale)}
+                        </p>
+                      </div>
 
-                <span
-                  className={`px-2.5 py-1 rounded-full text-xs font-bold ${
-                    monthState.unpaid === 0
-                      ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200'
-                      : 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-200'
-                  }`}
-                >
-                  {monthState.unpaid === 0 ? '✓' : '⏳'}
-                </span>
+                      <span
+                        className={`px-2.5 py-1 rounded-full text-xs font-bold ${
+                          isPaid
+                            ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200'
+                            : 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-200'
+                        }`}
+                      >
+                        {isPaid ? '✓' : '⏳'}
+                      </span>
+                    </>
+                  );
+                })()}
               </div>
             </button>
 
@@ -279,7 +287,7 @@ export default function HistoryList({
                     <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
                       <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">{t.remaining}</p>
                       <p className={`text-xl font-bold ${
-                        monthState.unpaid === 0
+                        monthState.unpaid === 0 && monthState.hasPayments
                           ? 'text-green-600 dark:text-green-400'
                           : 'text-amber-600 dark:text-amber-400'
                       }`}>
