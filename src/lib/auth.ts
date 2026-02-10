@@ -95,16 +95,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           throw new Error('Invalid email or password');
         }
 
-        // Check if email is verified
-        if (!user.emailVerified) {
-          // Log blocked login due to unverified email
-          await logAuthEvent({
-            event: 'login_blocked_unverified',
-            email: user.email,
-            userId: user.id,
-          });
-          return null;
-        }
+        // TODO: Re-enable email verification check once Resend domain is verified
+        // if (!user.emailVerified) {
+        //   await logAuthEvent({
+        //     event: 'login_blocked_unverified',
+        //     email: user.email,
+        //     userId: user.id,
+        //   });
+        //   return null;
+        // }
 
         // Reset failed login attempts on successful login
         if (user.failedLoginAttempts > 0) {

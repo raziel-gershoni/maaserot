@@ -4,8 +4,9 @@ import { prisma } from '@/lib/prisma';
 import { registerSchema } from '@/lib/validations/auth';
 import { checkRateLimit, resetRateLimit, RATE_LIMITS } from '@/lib/rateLimit';
 import { getClientIp } from '@/lib/utils/ip';
-import { generateVerificationToken } from '@/lib/tokens';
-import { sendVerificationEmail } from '@/lib/email';
+// TODO: Re-enable once Resend domain is verified
+// import { generateVerificationToken } from '@/lib/tokens';
+// import { sendVerificationEmail } from '@/lib/email';
 import { logAuthEventFromRequest } from '@/lib/authLogger';
 
 export async function POST(request: Request) {
@@ -65,17 +66,12 @@ export async function POST(request: Request) {
       },
     });
 
-    // Generate verification token
-    const token = await generateVerificationToken(email);
-
-    // Send verification email with user's locale
-    await sendVerificationEmail(email, token, user.locale);
+    // TODO: Re-enable verification email once Resend domain is verified
+    // const token = await generateVerificationToken(email);
+    // await sendVerificationEmail(email, token, user.locale);
 
     // Log registration event
     await logAuthEventFromRequest(request, 'register', email, user.id);
-
-    // Log verification email sent
-    await logAuthEventFromRequest(request, 'verification_sent', email, user.id);
 
     // Reset rate limit on successful registration
     resetRateLimit(ip, 'register');
@@ -83,7 +79,7 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         user: { id: user.id, email: user.email, name: user.name },
-        message: 'Registration successful. Please check your email to verify your account.',
+        message: 'Registration successful.',
       },
       { status: 201 }
     );
