@@ -79,7 +79,7 @@ export default function MonthNavigator({
       {!isAtMax && (
         <button
           onClick={() => navigateToMonth(maxMonth)}
-          className="ms-2 px-3 py-1 text-xs font-medium text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/30 hover:bg-purple-100 dark:hover:bg-purple-900/50 rounded-full transition-colors"
+          className="ms-2 px-3 py-1.5 text-xs font-semibold text-white bg-purple-600 hover:bg-purple-700 dark:bg-purple-600 dark:hover:bg-purple-500 rounded-lg shadow-sm transition-colors active:scale-95"
         >
           {translations.currentMonth}
         </button>
