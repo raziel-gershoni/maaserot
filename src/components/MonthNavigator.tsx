@@ -12,6 +12,7 @@ interface MonthNavigatorProps {
   translations: {
     previousMonth: string;
     nextMonth: string;
+    currentMonth: string;
   };
 }
 
@@ -74,6 +75,15 @@ export default function MonthNavigator({
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
         </svg>
       </button>
+
+      {!isAtMax && (
+        <button
+          onClick={() => navigateToMonth(maxMonth)}
+          className="ms-2 px-3 py-1 text-xs font-medium text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/30 hover:bg-purple-100 dark:hover:bg-purple-900/50 rounded-full transition-colors"
+        >
+          {translations.currentMonth}
+        </button>
+      )}
     </div>
   );
 }

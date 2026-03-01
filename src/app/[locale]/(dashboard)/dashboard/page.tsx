@@ -197,6 +197,7 @@ export default async function DashboardPage({
           translations={{
             previousMonth: t('previousMonth'),
             nextMonth: t('nextMonth'),
+            currentMonth: t('currentMonth'),
           }}
         />
 
