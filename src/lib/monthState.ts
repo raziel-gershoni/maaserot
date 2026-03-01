@@ -64,6 +64,81 @@ export async function calculateCurrentMonthState(userId: string, month: string) 
   };
 }
 
+// Calculate group-aware month state for a user
+// For solo-only months, returns individual state as-is.
+// For months with group payments, calculates at the group level
+// (summing all members' maaser/fixed charities, subtracting group payments).
+export async function calculateGroupMonthState(userId: string, month: string) {
+  const individualState = await calculateCurrentMonthState(userId, month);
+
+  // Check if any snapshots have more than 1 member (group payments)
+  const hasGroupSnapshots = individualState.snapshots.some(s => s.members.length > 1);
+
+  if (!hasGroupSnapshots) {
+    // Solo-only month — individual state is correct
+    return individualState;
+  }
+
+  // Collect all partner IDs from group snapshots
+  const partnerIds = new Set<string>();
+  for (const snapshot of individualState.snapshots) {
+    if (snapshot.members.length > 1) {
+      for (const member of snapshot.members) {
+        if (member.userId !== userId) {
+          partnerIds.add(member.userId);
+        }
+      }
+    }
+  }
+
+  // Fetch all members' individual states
+  const allMemberIds = [userId, ...Array.from(partnerIds)];
+  const memberStates = await Promise.all(
+    allMemberIds.map(id => calculateCurrentMonthState(id, month))
+  );
+
+  // Sum maaser and fixed charities across all members
+  let totalMaaser = 0;
+  let totalFixedCharities = 0;
+  for (const state of memberStates) {
+    totalMaaser += state.totalMaaser;
+    totalFixedCharities += state.fixedCharitiesTotal;
+  }
+
+  // Filter to exact-composition group snapshots (matching this group)
+  const sortedMemberIds = [...allMemberIds].sort();
+  const exactGroupSnapshots = individualState.snapshots.filter(snapshot => {
+    const snapshotMemberIds = snapshot.members.map(m => m.userId).sort();
+    return JSON.stringify(snapshotMemberIds) === JSON.stringify(sortedMemberIds);
+  });
+
+  // Calculate group paid and effective fixed charities (mirrors dashboard logic)
+  let groupPaid = 0;
+  let groupFixedCharitiesDeducted = 0;
+
+  for (const snapshot of exactGroupSnapshots) {
+    groupPaid += snapshot.groupAmountPaid;
+    if (exactGroupSnapshots.indexOf(snapshot) === 0) {
+      groupFixedCharitiesDeducted = snapshot.totalGroupFixedCharities;
+    }
+  }
+
+  const effectiveFixedCharities = exactGroupSnapshots.length > 0
+    ? groupFixedCharitiesDeducted
+    : totalFixedCharities;
+
+  const groupUnpaid = Math.max(0, totalMaaser - effectiveFixedCharities - groupPaid);
+
+  return {
+    totalMaaser,
+    fixedCharitiesTotal: effectiveFixedCharities,
+    totalPaid: groupPaid,
+    unpaid: groupUnpaid,
+    snapshots: individualState.snapshots,
+    hasPayments: individualState.hasPayments,
+  };
+}
+
 // Calculate accumulated unpaid across all months (for overflow handling)
 export async function calculateTotalAccumulatedUnpaid(
   userId: string,

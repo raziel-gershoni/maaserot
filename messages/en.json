@@ -69,7 +69,9 @@
     "cancel": "Cancel",
     "processing": "Processing...",
     "confirmPayment": "Confirm Payment",
-    "creditMessage": "Credit of {amount} will apply to future income this month"
+    "creditMessage": "Credit of {amount} will apply to future income this month",
+    "previousMonth": "Previous month",
+    "nextMonth": "Next month"
   },
   "income": {
     "title": "Income",

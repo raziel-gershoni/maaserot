@@ -37,6 +37,18 @@ export function formatCurrency(agorot: number, locale: string = 'he'): string {
   }).format(shekels);
 }
 
+export function getPreviousMonth(month: string): string {
+  const [year, m] = month.split('-').map(Number);
+  const date = new Date(year, m - 2, 1); // m-1 for 0-indexed, -1 more for previous
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+}
+
+export function getNextMonth(month: string): string {
+  const [year, m] = month.split('-').map(Number);
+  const date = new Date(year, m, 1); // m-1 for 0-indexed, +1 for next = just m
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+}
+
 export function parseCurrency(value: string): number {
   // Remove currency symbols and parse to agorot (cents)
   const cleaned = value.replace(/[^\d.]/g, '');

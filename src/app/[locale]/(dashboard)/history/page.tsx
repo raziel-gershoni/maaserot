@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { calculateCurrentMonthState } from '@/lib/monthState';
+import { calculateGroupMonthState } from '@/lib/monthState';
 import { getTranslations } from 'next-intl/server';
 import HistoryList from '@/components/HistoryList';
 
@@ -39,7 +39,7 @@ export default async function HistoryPage() {
   // Calculate state for each month
   const monthStates = await Promise.all(
     months.map(async (month) => {
-      const state = await calculateCurrentMonthState(session.user.id, month);
+      const state = await calculateGroupMonthState(session.user.id, month);
       return { month, ...state };
     })
   );

@@ -5,6 +5,7 @@ import { getCurrentMonth, formatCurrency } from '@/lib/calculations';
 import { calculateCurrentMonthState } from '@/lib/monthState';
 import { getTranslations } from 'next-intl/server';
 import GroupPaymentModal from '@/components/GroupPaymentModal';
+import MonthNavigator from '@/components/MonthNavigator';
 
 interface MonthState {
   totalMaaser: number;
@@ -20,7 +21,11 @@ interface GroupMember {
   monthState: MonthState;
 }
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ month?: string }>;
+}) {
   const session = await auth();
 
   if (!session?.user?.id) {
@@ -28,7 +33,13 @@ export default async function DashboardPage() {
   }
 
   const t = await getTranslations('dashboard');
-  const currentMonth = getCurrentMonth();
+  const maxMonth = getCurrentMonth();
+  const params = await searchParams;
+  const monthParam = params.month;
+
+  // Validate month param: must be YYYY-MM format and not in the future
+  const isValidMonth = monthParam && /^\d{4}-\d{2}$/.test(monthParam) && monthParam <= maxMonth;
+  const selectedMonth = isValidMonth ? monthParam : maxMonth;
 
   // Prepare translations for client components (will be finalized after hasPartner is known)
   const getPaymentModalTranslations = (isGroup: boolean) => ({
@@ -86,7 +97,7 @@ export default async function DashboardPage() {
   const members = [];
 
   // Get current user's data
-  const myMonthState = await calculateCurrentMonthState(session.user.id, currentMonth);
+  const myMonthState = await calculateCurrentMonthState(session.user.id, selectedMonth);
 
   members.push({
     userId: session.user.id,
@@ -97,7 +108,7 @@ export default async function DashboardPage() {
 
   // Add partner if exists
   if (partner) {
-    const partnerMonthState = await calculateCurrentMonthState(partner.id, currentMonth);
+    const partnerMonthState = await calculateCurrentMonthState(partner.id, selectedMonth);
 
     members.push({
       userId: partner.id,
@@ -113,7 +124,7 @@ export default async function DashboardPage() {
   // Fetch group snapshots for this month
   const groupSnapshots = await prisma.groupPaymentSnapshot.findMany({
     where: {
-      month: currentMonth,
+      month: selectedMonth,
       members: { some: { userId: { in: allMemberIds } } }
     },
     include: { members: true },
@@ -171,6 +182,24 @@ export default async function DashboardPage() {
           <p className="text-sm sm:text-base text-gray-700 dark:text-gray-300">{t('subtitle')}</p>
         </div>
 
+        {/* Month Navigation */}
+        <MonthNavigator
+          currentMonth={selectedMonth}
+          maxMonth={maxMonth}
+          formattedMonth={(() => {
+            const [y, m] = selectedMonth.split('-');
+            return new Date(parseInt(y), parseInt(m) - 1).toLocaleDateString(
+              locale === 'he' ? 'he-IL' : 'en-US',
+              { year: 'numeric', month: 'long' }
+            );
+          })()}
+          locale={locale}
+          translations={{
+            previousMonth: t('previousMonth'),
+            nextMonth: t('nextMonth'),
+          }}
+        />
+
         {/* Unified Group View - Always shown (group of 1 or N) */}
         {groupData.totals.totalMaaser > 0 ? (
           <div className="space-y-6 mb-6">
@@ -216,7 +245,7 @@ export default async function DashboardPage() {
                     {groupData.totals.unpaid === 0 ? '✓ ' + t('paid') : '⏳ ' + t('unpaid')}
                   </span>
                   <GroupPaymentModal
-                    month={currentMonth}
+                    month={selectedMonth}
                     totalUnpaid={groupData.totals.unpaid}
                     locale={locale}
                     label={groupData.totals.unpaid > 0
@@ -273,7 +302,7 @@ export default async function DashboardPage() {
             <p className="text-xl text-gray-700 dark:text-gray-300 mb-4">{t('nothingToPay')}</p>
             <p className="text-gray-600 dark:text-gray-400 mb-6">{t('addFirstIncome')}</p>
             <GroupPaymentModal
-              month={currentMonth}
+              month={selectedMonth}
               totalUnpaid={0}
               locale={locale}
               label={hasPartner ? t('payGroupInAdvance') : t('payInAdvance')}
