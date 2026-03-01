@@ -26,6 +26,8 @@ export default function GroupPaymentModal({ month, totalUnpaid, locale, label, m
   const [isOpen, setIsOpen] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState(totalUnpaid);
   const [isLoading, setIsLoading] = useState(false);
+  const [isEditingAmount, setIsEditingAmount] = useState(false);
+  const [editValue, setEditValue] = useState('');
   const router = useRouter();
 
   // Handle advance payments (when totalUnpaid = 0)
@@ -104,9 +106,37 @@ export default function GroupPaymentModal({ month, totalUnpaid, locale, label, m
                   >
                     ↓
                   </button>
-                  <span className="text-3xl font-bold text-purple-600 dark:text-purple-400 min-w-[140px] text-center">
-                    {formatCurrency(paymentAmount, locale)}
-                  </span>
+                  {isEditingAmount ? (
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      autoFocus
+                      value={editValue}
+                      onChange={(e) => setEditValue(e.target.value)}
+                      onBlur={() => {
+                        const parsed = parseFloat(editValue);
+                        setPaymentAmount(isNaN(parsed) || parsed < 0 ? 0 : Math.round(parsed * 100));
+                        setIsEditingAmount(false);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          (e.target as HTMLInputElement).blur();
+                        }
+                      }}
+                      className="text-3xl font-bold text-purple-600 dark:text-purple-400 min-w-[140px] w-[140px] text-center bg-transparent border-b-2 border-purple-600 dark:border-purple-400 outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    />
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditValue((paymentAmount / 100).toString());
+                        setIsEditingAmount(true);
+                      }}
+                      className="text-3xl font-bold text-purple-600 dark:text-purple-400 min-w-[140px] text-center cursor-text hover:underline decoration-purple-400/50 underline-offset-4"
+                    >
+                      {formatCurrency(paymentAmount, locale)}
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => setPaymentAmount(paymentAmount + 100)}
