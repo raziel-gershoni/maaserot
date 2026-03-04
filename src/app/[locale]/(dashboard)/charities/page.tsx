@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
+import ConfirmDialog from '@/components/ConfirmDialog';
 
 interface Charity {
   id: string;
@@ -17,6 +18,8 @@ export default function CharitiesPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   // Edit state
   const [editingCharity, setEditingCharity] = useState<Charity | null>(null);
@@ -99,10 +102,6 @@ export default function CharitiesPage() {
   };
 
   const deleteCharity = async (id: string) => {
-    if (!confirm(t('deleteConfirm'))) {
-      return;
-    }
-
     try {
       const response = await fetch(`/api/charities?id=${id}`, {
         method: 'DELETE',
@@ -113,6 +112,8 @@ export default function CharitiesPage() {
       }
     } catch (error) {
       console.error('Failed to delete charity:', error);
+    } finally {
+      setConfirmDeleteId(null);
     }
   };
 
@@ -296,7 +297,7 @@ export default function CharitiesPage() {
                         )}
                       </button>
                       <button
-                        onClick={() => deleteCharity(charity.id)}
+                        onClick={() => setConfirmDeleteId(charity.id)}
                         className="px-3 py-2 bg-red-500 hover:bg-red-600 dark:bg-red-600 dark:hover:bg-red-500 text-white rounded-lg font-semibold transition"
                         title={t('delete')}
                       >
@@ -317,6 +318,16 @@ export default function CharitiesPage() {
           )}
         </div>
       </div>
+
+      <ConfirmDialog
+        isOpen={confirmDeleteId !== null}
+        onConfirm={() => confirmDeleteId && deleteCharity(confirmDeleteId)}
+        onCancel={() => setConfirmDeleteId(null)}
+        title={t('delete')}
+        message={t('deleteConfirm')}
+        confirmLabel={t('delete')}
+        cancelLabel={t('cancel')}
+      />
 
       {/* Edit Modal */}
       {editingCharity && (

@@ -104,6 +104,7 @@ export default async function HistoryPage() {
     noPaymentsYet: t('noPaymentsYet'),
     deletePayment: t('deletePayment'),
     deletePaymentConfirm: t('deletePaymentConfirm'),
+    cancel: t('cancel'),
   };
 
   // Format month for display - passed as a function to client

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { formatCurrency } from '@/lib/calculations';
+import ConfirmDialog from '@/components/ConfirmDialog';
 
 interface MemberState {
   userId: string;
@@ -54,6 +55,7 @@ interface HistoryListProps {
     noPaymentsYet: string;
     deletePayment: string;
     deletePaymentConfirm: string;
+    cancel: string;
   };
   formattedMonths: Record<string, string>;
 }
@@ -69,6 +71,7 @@ export default function HistoryList({
   const router = useRouter();
   const [expandedMonths, setExpandedMonths] = useState<Set<string>>(new Set());
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const toggleMonth = (month: string) => {
     setExpandedMonths(prev => {
@@ -83,7 +86,6 @@ export default function HistoryList({
   };
 
   const deletePayment = async (snapshotId: string) => {
-    if (!confirm(t.deletePaymentConfirm)) return;
     setDeletingId(snapshotId);
     try {
       const res = await fetch(`/api/payment/unified?id=${snapshotId}`, { method: 'DELETE' });
@@ -92,6 +94,7 @@ export default function HistoryList({
       }
     } finally {
       setDeletingId(null);
+      setConfirmDeleteId(null);
     }
   };
 
@@ -355,7 +358,7 @@ export default function HistoryList({
                                 })}
                               </span>
                               <button
-                                onClick={(e) => { e.stopPropagation(); deletePayment(snapshot.id); }}
+                                onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(snapshot.id); }}
                                 disabled={deletingId === snapshot.id}
                                 className="p-1 text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors disabled:opacity-50"
                                 title={t.deletePayment}
@@ -387,6 +390,16 @@ export default function HistoryList({
           </div>
         );
       })}
+      <ConfirmDialog
+        isOpen={confirmDeleteId !== null}
+        onConfirm={() => confirmDeleteId && deletePayment(confirmDeleteId)}
+        onCancel={() => setConfirmDeleteId(null)}
+        title={t.deletePayment}
+        message={t.deletePaymentConfirm}
+        confirmLabel={t.deletePayment}
+        cancelLabel={t.cancel}
+        isLoading={deletingId !== null}
+      />
     </div>
   );
 }

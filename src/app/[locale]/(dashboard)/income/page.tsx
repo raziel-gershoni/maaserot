@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
 import { useRouter } from '@/i18n/routing';
+import ConfirmDialog from '@/components/ConfirmDialog';
 
 interface Income {
   id: string;
@@ -26,6 +27,7 @@ export default function IncomePage() {
   const [editAmount, setEditAmount] = useState('');
   const [editPercentage, setEditPercentage] = useState('');
   const [editDescription, setEditDescription] = useState('');
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const t = useTranslations('income');
   const router = useRouter();
@@ -140,10 +142,6 @@ export default function IncomePage() {
   };
 
   const deleteIncome = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this income entry?')) {
-      return;
-    }
-
     try {
       const response = await fetch(`/api/income?id=${id}`, {
         method: 'DELETE',
@@ -154,6 +152,8 @@ export default function IncomePage() {
       }
     } catch (error) {
       console.error('Failed to delete income:', error);
+    } finally {
+      setConfirmDeleteId(null);
     }
   };
 
@@ -345,7 +345,7 @@ export default function IncomePage() {
                             {t('edit')}
                           </button>
                           <button
-                            onClick={() => deleteIncome(income.id)}
+                            onClick={() => setConfirmDeleteId(income.id)}
                             className="px-3 py-1 bg-red-500 hover:bg-red-600 dark:bg-red-600 dark:hover:bg-red-500 text-white rounded-lg text-sm font-semibold transition"
                           >
                             {t('delete')}
@@ -362,6 +362,15 @@ export default function IncomePage() {
           )}
         </div>
       </div>
+      <ConfirmDialog
+        isOpen={confirmDeleteId !== null}
+        onConfirm={() => confirmDeleteId && deleteIncome(confirmDeleteId)}
+        onCancel={() => setConfirmDeleteId(null)}
+        title={t('delete')}
+        message={t('deleteConfirm')}
+        confirmLabel={t('delete')}
+        cancelLabel={t('cancel')}
+      />
     </div>
   );
 }

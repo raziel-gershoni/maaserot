@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
 import { useRouter } from '@/i18n/routing';
+import ConfirmDialog from '@/components/ConfirmDialog';
 
 interface User {
   id: string;
@@ -31,6 +32,7 @@ export default function PartnershipPage() {
   const [pendingInvitations, setPendingInvitations] = useState<Partnership[]>([]);
   const [sentInvitations, setSentInvitations] = useState<Partnership[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [confirmLeave, setConfirmLeave] = useState(false);
 
   const t = useTranslations('partnership');
   const router = useRouter();
@@ -159,7 +161,6 @@ export default function PartnershipPage() {
 
   const handleLeave = async () => {
     if (!currentPartnership) return;
-    if (!confirm(t('leaveConfirm'))) return;
 
     try {
       const response = await fetch(`/api/partnership?id=${currentPartnership.id}`, {
@@ -168,11 +169,12 @@ export default function PartnershipPage() {
 
       if (response.ok) {
         fetchPartnerships();
-        // Redirect to dashboard to see solo view
         setTimeout(() => router.push('/dashboard'), 500);
       }
     } catch (error) {
       console.error('Failed to leave partnership:', error);
+    } finally {
+      setConfirmLeave(false);
     }
   };
 
@@ -219,7 +221,7 @@ export default function PartnershipPage() {
                 </p>
               </div>
               <button
-                onClick={handleLeave}
+                onClick={() => setConfirmLeave(true)}
                 className="px-4 py-2 bg-red-600 hover:bg-red-700 dark:bg-red-700 dark:hover:bg-red-600 text-white rounded-lg font-medium text-sm transition"
               >
                 {t('leavePartnership')}
@@ -346,6 +348,15 @@ export default function PartnershipPage() {
           </div>
         )}
       </div>
+      <ConfirmDialog
+        isOpen={confirmLeave}
+        onConfirm={handleLeave}
+        onCancel={() => setConfirmLeave(false)}
+        title={t('leavePartnership')}
+        message={t('leaveConfirm')}
+        confirmLabel={t('leavePartnership')}
+        cancelLabel={t('cancel')}
+      />
     </div>
   );
 }

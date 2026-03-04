@@ -98,7 +98,8 @@
     "delete": "מחק",
     "save": "שמור",
     "cancel": "ביטול",
-    "frozen": "קפוא"
+    "frozen": "קפוא",
+    "deleteConfirm": "האם אתה בטוח שברצונך למחוק הכנסה זו?"
   },
   "charities": {
     "title": "תרומות קבועות",
@@ -151,7 +152,8 @@
     "groupTotal": "סה\"כ קבוצה",
     "remaining": "נותר",
     "deletePayment": "מחק תשלום",
-    "deletePaymentConfirm": "האם אתה בטוח שברצונך למחוק תשלום זה?"
+    "deletePaymentConfirm": "האם אתה בטוח שברצונך למחוק תשלום זה?",
+    "cancel": "ביטול"
   },
   "settings": {
     "title": "הגדרות",
