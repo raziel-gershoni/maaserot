@@ -96,3 +96,42 @@ export async function POST(request: Request) {
     );
   }
 }
+
+export async function DELETE(request: Request) {
+  try {
+    const session = await auth();
+
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
+
+    if (!id) {
+      return NextResponse.json({ error: 'Missing payment id' }, { status: 400 });
+    }
+
+    // Verify user is a member of this payment
+    const member = await prisma.groupPaymentMember.findFirst({
+      where: { groupPaymentSnapshotId: id, userId: session.user.id },
+    });
+
+    if (!member) {
+      return NextResponse.json({ error: 'Payment not found' }, { status: 404 });
+    }
+
+    // Delete snapshot (GroupPaymentMember cascades automatically)
+    await prisma.groupPaymentSnapshot.delete({
+      where: { id },
+    });
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('Delete payment error:', error);
+    return NextResponse.json(
+      { error: 'Failed to delete payment' },
+      { status: 500 }
+    );
+  }
+}

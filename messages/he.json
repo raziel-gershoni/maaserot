@@ -149,7 +149,9 @@
     "groupMembers": "חברי הקבוצה",
     "you": "אתה",
     "groupTotal": "סה\"כ קבוצה",
-    "remaining": "נותר"
+    "remaining": "נותר",
+    "deletePayment": "מחק תשלום",
+    "deletePaymentConfirm": "האם אתה בטוח שברצונך למחוק תשלום זה?"
   },
   "settings": {
     "title": "הגדרות",

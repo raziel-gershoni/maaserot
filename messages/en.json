@@ -149,7 +149,9 @@
     "groupMembers": "Group Members",
     "you": "You",
     "groupTotal": "Group Total",
-    "remaining": "remaining"
+    "remaining": "remaining",
+    "deletePayment": "Delete Payment",
+    "deletePaymentConfirm": "Are you sure you want to delete this payment?"
   },
   "settings": {
     "title": "Settings",
