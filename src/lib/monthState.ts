@@ -24,32 +24,11 @@ export async function calculateCurrentMonthState(userId: string, month: string) 
     where: { userId, isActive: true }
   });
 
-  let fixedCharitiesTotal = 0;
-  let totalPaid = 0;
+  // Always use live active charities for dashboard calculation
+  const fixedCharitiesTotal = fixedCharities.reduce((sum, c) => sum + c.amount, 0);
 
-  // Count ALL snapshots where user is a member (solo or group)
-  if (groupSnapshots.length > 0) {
-    // Extract THIS USER's fixed charities from the first payment's memberStates
-    const firstSnapshot = groupSnapshots[0];
-    const memberStates = firstSnapshot.memberStates as Array<{
-      userId: string;
-      fixedCharitiesTotal: number;
-    }> | null;
-
-    if (memberStates && Array.isArray(memberStates)) {
-      const userState = memberStates.find(m => m.userId === userId);
-      fixedCharitiesTotal = userState?.fixedCharitiesTotal ?? 0;
-    } else {
-      // Fallback for old snapshots without memberStates
-      fixedCharitiesTotal = fixedCharities.reduce((sum, c) => sum + c.amount, 0);
-    }
-
-    // Sum all payments where user participated
-    totalPaid = groupSnapshots.reduce((sum, s) => sum + s.groupAmountPaid, 0);
-  } else {
-    // No payments yet
-    fixedCharitiesTotal = fixedCharities.reduce((sum, c) => sum + c.amount, 0);
-  }
+  // Sum all payments where user participated
+  const totalPaid = groupSnapshots.reduce((sum, s) => sum + s.groupAmountPaid, 0);
 
   // Unpaid amount this month (calculated directly)
   const unpaid = Math.max(0, totalMaaser - fixedCharitiesTotal - totalPaid);
@@ -112,26 +91,17 @@ export async function calculateGroupMonthState(userId: string, month: string) {
     return JSON.stringify(snapshotMemberIds) === JSON.stringify(sortedMemberIds);
   });
 
-  // Calculate group paid and effective fixed charities (mirrors dashboard logic)
+  // Always use live fixed charities for dashboard calculation
   let groupPaid = 0;
-  let groupFixedCharitiesDeducted = 0;
-
   for (const snapshot of exactGroupSnapshots) {
     groupPaid += snapshot.groupAmountPaid;
-    if (exactGroupSnapshots.indexOf(snapshot) === 0) {
-      groupFixedCharitiesDeducted = snapshot.totalGroupFixedCharities;
-    }
   }
 
-  const effectiveFixedCharities = exactGroupSnapshots.length > 0
-    ? groupFixedCharitiesDeducted
-    : totalFixedCharities;
-
-  const groupUnpaid = Math.max(0, totalMaaser - effectiveFixedCharities - groupPaid);
+  const groupUnpaid = Math.max(0, totalMaaser - totalFixedCharities - groupPaid);
 
   return {
     totalMaaser,
-    fixedCharitiesTotal: effectiveFixedCharities,
+    fixedCharitiesTotal: totalFixedCharities,
     totalPaid: groupPaid,
     unpaid: groupUnpaid,
     snapshots: individualState.snapshots,

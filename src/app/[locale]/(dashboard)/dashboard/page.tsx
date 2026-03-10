@@ -146,22 +146,13 @@ export default async function DashboardPage({
     totalFixedCharities += member.monthState.fixedCharitiesTotal;
   }
 
-  // Calculate group paid and effective fixed charities
+  // Always use live fixed charities for dashboard calculation
   let groupPaid = 0;
-  let groupFixedCharitiesDeducted = 0;
-
   for (const snapshot of exactGroupSnapshots) {
     groupPaid += snapshot.groupAmountPaid;
-    if (exactGroupSnapshots.indexOf(snapshot) === 0) {
-      groupFixedCharitiesDeducted = snapshot.totalGroupFixedCharities;
-    }
   }
 
-  const effectiveFixedCharities = exactGroupSnapshots.length > 0
-    ? groupFixedCharitiesDeducted
-    : totalFixedCharities;
-
-  const groupUnpaid = Math.max(0, totalMaaser - effectiveFixedCharities - groupPaid);
+  const groupUnpaid = Math.max(0, totalMaaser - totalFixedCharities - groupPaid);
 
   const groupData = {
     members,
