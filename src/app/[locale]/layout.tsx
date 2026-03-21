@@ -48,6 +48,8 @@ export default async function LocaleLayout({
   return (
     <html lang={locale} dir={isRTL ? 'rtl' : 'ltr'} className="h-full">
       <head>
+        {/* Telegram Mini App SDK */}
+        <script src="https://telegram.org/js/telegram-web-app.js" />
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
         <meta name="theme-color" content="#D47A5C" media="(prefers-color-scheme: light)" />
         <meta name="theme-color" content="#E08C6E" media="(prefers-color-scheme: dark)" />

@@ -54,6 +54,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
+    if (!user.passwordHash) {
+      return NextResponse.json(
+        { error: 'Password change not available for Telegram accounts' },
+        { status: 400 }
+      );
+    }
+
     // Verify current password
     const isValidPassword = await bcrypt.compare(currentPassword, user.passwordHash);
 

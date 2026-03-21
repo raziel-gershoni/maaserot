@@ -13,9 +13,13 @@ model User {
   id             String   @id @default(cuid())
   email          String   @unique
   name           String?
-  passwordHash   String
+  passwordHash   String?
   defaultPercent Int      @default(10)
   locale         String   @default("he")
+
+  // Telegram Mini App auth
+  telegramId       BigInt?  @unique
+  telegramUsername  String?
 
   // Email verification
   emailVerified  DateTime?

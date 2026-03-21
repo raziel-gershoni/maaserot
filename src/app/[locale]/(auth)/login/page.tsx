@@ -6,16 +6,25 @@ import { useTranslations } from 'next-intl';
 import { Link, useRouter } from '@/i18n/routing';
 import { useSearchParams } from 'next/navigation';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
+import TelegramAuth from '@/components/TelegramAuth';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isTelegram, setIsTelegram] = useState(false);
   const router = useRouter();
   const searchParams = useSearchParams();
   const t = useTranslations('auth');
   const tc = useTranslations('common');
+
+  // Detect Telegram Mini App environment
+  useEffect(() => {
+    if (window.Telegram?.WebApp?.initData) {
+      setIsTelegram(true);
+    }
+  }, []);
 
   // Check for error in URL params (from NextAuth redirect)
   useEffect(() => {
@@ -65,6 +74,11 @@ export default function LoginPage() {
       setIsLoading(false);
     }
   };
+
+  // If running inside Telegram, show TelegramAuth instead of login form
+  if (isTelegram) {
+    return <TelegramAuth />;
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">

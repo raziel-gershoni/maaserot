@@ -3,6 +3,7 @@ import Credentials from 'next-auth/providers/credentials';
 import { compare } from 'bcryptjs';
 import { prisma } from './prisma';
 import { logAuthEvent } from './authLogger';
+import { validateInitData } from './telegram';
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   pages: {
@@ -13,6 +14,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   },
   providers: [
     Credentials({
+      id: 'credentials',
       credentials: {
         email: { label: 'Email', type: 'email' },
         password: { label: 'Password', type: 'password' },
@@ -121,6 +123,80 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           event: 'login_success',
           email: user.email,
           userId: user.id,
+        });
+
+        return {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+        };
+      },
+    }),
+    Credentials({
+      id: 'telegram',
+      credentials: {
+        initData: { label: 'Telegram initData', type: 'text' },
+      },
+      async authorize(credentials) {
+        if (!credentials?.initData) {
+          throw new Error('Missing Telegram initData');
+        }
+
+        const botToken = process.env.TELEGRAM_BOT_TOKEN;
+        if (!botToken) {
+          throw new Error('Telegram bot token not configured');
+        }
+
+        const telegramUser = validateInitData(credentials.initData as string, botToken);
+        if (!telegramUser) {
+          throw new Error('Invalid Telegram authentication');
+        }
+
+        // Find or create user by telegramId
+        let user = await prisma.user.findUnique({
+          where: { telegramId: BigInt(telegramUser.id) },
+          select: { id: true, email: true, name: true },
+        });
+
+        if (!user) {
+          // Create a new user for this Telegram account
+          const displayName = [telegramUser.first_name, telegramUser.last_name]
+            .filter(Boolean)
+            .join(' ');
+          const placeholderEmail = `tg_${telegramUser.id}@telegram.user`;
+
+          user = await prisma.user.create({
+            data: {
+              email: placeholderEmail,
+              name: displayName || `Telegram User ${telegramUser.id}`,
+              telegramId: BigInt(telegramUser.id),
+              telegramUsername: telegramUser.username || null,
+              locale: telegramUser.language_code === 'he' ? 'he' : 'he',
+            },
+            select: { id: true, email: true, name: true },
+          });
+
+          await logAuthEvent({
+            event: 'register',
+            email: placeholderEmail,
+            userId: user.id,
+            metadata: { provider: 'telegram', telegramId: telegramUser.id.toString() },
+          });
+        } else {
+          // Update username if changed
+          if (telegramUser.username) {
+            await prisma.user.update({
+              where: { telegramId: BigInt(telegramUser.id) },
+              data: { telegramUsername: telegramUser.username },
+            });
+          }
+        }
+
+        await logAuthEvent({
+          event: 'login_success',
+          email: user.email,
+          userId: user.id,
+          metadata: { provider: 'telegram' },
         });
 
         return {
