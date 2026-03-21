@@ -3,6 +3,7 @@ import { getMessages } from 'next-intl/server';
 import { notFound } from 'next/navigation';
 import { routing } from '@/i18n/routing';
 import type { Metadata } from 'next';
+import Script from 'next/script';
 import '../globals.css';
 
 export const metadata: Metadata = {
@@ -48,8 +49,6 @@ export default async function LocaleLayout({
   return (
     <html lang={locale} dir={isRTL ? 'rtl' : 'ltr'} className="h-full">
       <head>
-        {/* Telegram Mini App SDK */}
-        <script src="https://telegram.org/js/telegram-web-app.js" />
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
         <meta name="theme-color" content="#D47A5C" media="(prefers-color-scheme: light)" />
         <meta name="theme-color" content="#E08C6E" media="(prefers-color-scheme: dark)" />
@@ -68,6 +67,7 @@ export default async function LocaleLayout({
         <meta name="apple-mobile-web-app-title" content="Maaserot" />
       </head>
       <body className="antialiased h-full bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100">
+        <Script src="https://telegram.org/js/telegram-web-app.js" strategy="beforeInteractive" />
         <NextIntlClientProvider messages={messages}>
           {children}
         </NextIntlClientProvider>

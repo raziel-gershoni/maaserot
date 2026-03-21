@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { signIn, useSession } from 'next-auth/react';
+import { useEffect, useRef, useState } from 'react';
+import { signIn } from 'next-auth/react';
 import { useRouter } from '@/i18n/routing';
 
 declare global {
@@ -49,13 +49,15 @@ declare global {
  */
 export default function TelegramAuth() {
   const [status, setStatus] = useState<'idle' | 'authenticating' | 'error'>('idle');
-  const { data: session } = useSession();
   const router = useRouter();
+  const attempted = useRef(false);
 
   useEffect(() => {
+    if (attempted.current) return;
+    attempted.current = true;
+
     const tg = window.Telegram?.WebApp;
     if (!tg?.initData) return; // Not inside Telegram
-    if (session) return; // Already logged in
 
     // Signal to Telegram that the app is ready
     tg.ready();
@@ -79,7 +81,7 @@ export default function TelegramAuth() {
       console.error('Telegram auth error:', err);
       setStatus('error');
     });
-  }, [session, router]);
+  }, [router]);
 
   if (status === 'authenticating') {
     return (
