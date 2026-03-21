@@ -30,7 +30,9 @@
     "loading": "Loading...",
     "alreadyHaveAccount": "Already have an account?",
     "noAccount": "Don't have an account?",
-    "invalidCredentials": "Invalid email or password"
+    "invalidCredentials": "Invalid email or password",
+    "orLoginWith": "or",
+    "loginWithTelegram": "Log in with Telegram"
   },
   "dashboard": {
     "title": "Dashboard",

@@ -30,7 +30,9 @@
     "loading": "טוען...",
     "alreadyHaveAccount": "יש לך כבר חשבון?",
     "noAccount": "אין לך חשבון?",
-    "invalidCredentials": "אימייל או סיסמה שגויים"
+    "invalidCredentials": "אימייל או סיסמה שגויים",
+    "orLoginWith": "או",
+    "loginWithTelegram": "התחבר עם טלגרם"
   },
   "dashboard": {
     "title": "לוח בקרה",

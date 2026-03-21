@@ -3,7 +3,7 @@ import Credentials from 'next-auth/providers/credentials';
 import { compare } from 'bcryptjs';
 import { prisma } from './prisma';
 import { logAuthEvent } from './authLogger';
-import { validateInitData } from './telegram';
+import { validateInitData, findOrCreateTelegramUser } from './telegram';
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   pages: {
@@ -152,45 +152,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           throw new Error('Invalid Telegram authentication');
         }
 
-        // Find or create user by telegramId
-        let user = await prisma.user.findUnique({
-          where: { telegramId: BigInt(telegramUser.id) },
-          select: { id: true, email: true, name: true },
-        });
-
-        if (!user) {
-          // Create a new user for this Telegram account
-          const displayName = [telegramUser.first_name, telegramUser.last_name]
-            .filter(Boolean)
-            .join(' ');
-          const placeholderEmail = `tg_${telegramUser.id}@telegram.user`;
-
-          user = await prisma.user.create({
-            data: {
-              email: placeholderEmail,
-              name: displayName || `Telegram User ${telegramUser.id}`,
-              telegramId: BigInt(telegramUser.id),
-              telegramUsername: telegramUser.username || null,
-              locale: telegramUser.language_code === 'he' ? 'he' : 'he',
-            },
-            select: { id: true, email: true, name: true },
-          });
-
-          await logAuthEvent({
-            event: 'register',
-            email: placeholderEmail,
-            userId: user.id,
-            metadata: { provider: 'telegram', telegramId: telegramUser.id.toString() },
-          });
-        } else {
-          // Update username if changed
-          if (telegramUser.username) {
-            await prisma.user.update({
-              where: { telegramId: BigInt(telegramUser.id) },
-              data: { telegramUsername: telegramUser.username },
-            });
-          }
-        }
+        const user = await findOrCreateTelegramUser(telegramUser);
 
         await logAuthEvent({
           event: 'login_success',

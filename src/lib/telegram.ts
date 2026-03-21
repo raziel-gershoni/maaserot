@@ -1,4 +1,7 @@
 import crypto from 'crypto';
+import { createRemoteJWKSet, jwtVerify } from 'jose';
+import { prisma } from './prisma';
+import { logAuthEvent } from './authLogger';
 
 export interface TelegramUser {
   id: number;
@@ -6,6 +9,71 @@ export interface TelegramUser {
   last_name?: string;
   username?: string;
   language_code?: string;
+}
+
+/**
+ * Validate a Telegram OIDC id_token JWT via JWKS.
+ * Returns the payload with Telegram user info.
+ */
+export async function validateTelegramIdToken(idToken: string, clientId: string) {
+  const jwks = createRemoteJWKSet(
+    new URL('https://oauth.telegram.org/.well-known/jwks.json')
+  );
+  const { payload } = await jwtVerify(idToken, jwks, {
+    issuer: 'https://oauth.telegram.org',
+    audience: clientId,
+  });
+  return payload;
+}
+
+/**
+ * Find or create a user by Telegram ID.
+ * Shared by Mini App provider and OIDC callback.
+ */
+export async function findOrCreateTelegramUser(telegramUser: TelegramUser): Promise<{
+  id: string;
+  email: string;
+  name: string | null;
+}> {
+  let user = await prisma.user.findUnique({
+    where: { telegramId: BigInt(telegramUser.id) },
+    select: { id: true, email: true, name: true },
+  });
+
+  if (!user) {
+    const displayName = [telegramUser.first_name, telegramUser.last_name]
+      .filter(Boolean)
+      .join(' ');
+    const placeholderEmail = `tg_${telegramUser.id}@telegram.user`;
+
+    user = await prisma.user.create({
+      data: {
+        email: placeholderEmail,
+        name: displayName || `Telegram User ${telegramUser.id}`,
+        telegramId: BigInt(telegramUser.id),
+        telegramUsername: telegramUser.username || null,
+        locale: telegramUser.language_code === 'he' ? 'he' : 'he',
+      },
+      select: { id: true, email: true, name: true },
+    });
+
+    await logAuthEvent({
+      event: 'register',
+      email: placeholderEmail,
+      userId: user.id,
+      metadata: { provider: 'telegram', telegramId: telegramUser.id.toString() },
+    });
+  } else {
+    // Update username if changed
+    if (telegramUser.username) {
+      await prisma.user.update({
+        where: { telegramId: BigInt(telegramUser.id) },
+        data: { telegramUsername: telegramUser.username },
+      });
+    }
+  }
+
+  return user;
 }
 
 /**
