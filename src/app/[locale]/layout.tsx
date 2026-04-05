@@ -3,7 +3,6 @@ import { getMessages } from 'next-intl/server';
 import { notFound } from 'next/navigation';
 import { routing } from '@/i18n/routing';
 import type { Metadata } from 'next';
-import Script from 'next/script';
 import '../globals.css';
 
 export const metadata: Metadata = {
@@ -67,7 +66,6 @@ export default async function LocaleLayout({
         <meta name="apple-mobile-web-app-title" content="Maaserot" />
       </head>
       <body className="antialiased h-full bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100">
-        <Script src="https://telegram.org/js/telegram-web-app.js" strategy="beforeInteractive" />
         <NextIntlClientProvider messages={messages}>
           {children}
         </NextIntlClientProvider>

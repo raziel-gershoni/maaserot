@@ -23,13 +23,14 @@ export default function LocaleSync() {
             // Set cookie
             document.cookie = `NEXT_LOCALE=${userLocale}; path=/; max-age=31536000`;
 
-            // Reload page to apply locale if different from current
+            // Navigate to correct locale without full page reload
             const currentLocale = window.location.pathname.split('/')[1];
             if (currentLocale !== userLocale) {
-              window.location.pathname = window.location.pathname.replace(
+              const newPath = window.location.pathname.replace(
                 `/${currentLocale}`,
                 `/${userLocale}`
               );
+              router.replace(newPath);
             }
           }
         } catch (error) {

@@ -26,15 +26,18 @@ export default async function DashboardPage({
 }: {
   searchParams: Promise<{ month?: string }>;
 }) {
-  const session = await auth();
+  // Phase 1: Auth + translations in parallel
+  const [session, t, params] = await Promise.all([
+    auth(),
+    getTranslations('dashboard'),
+    searchParams,
+  ]);
 
   if (!session?.user?.id) {
     redirect('/login');
   }
 
-  const t = await getTranslations('dashboard');
   const maxMonth = getCurrentMonth();
-  const params = await searchParams;
   const monthParam = params.month;
 
   // Validate month param: must be YYYY-MM format and not in the future
@@ -53,39 +56,28 @@ export default async function DashboardPage({
     creditMessage: t('creditMessage'),
   });
 
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: { locale: true, name: true },
-  });
+  // Phase 2: User data + partnership in parallel
+  const [user, partnership] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { locale: true, name: true },
+    }),
+    prisma.partnership.findFirst({
+      where: {
+        status: 'ACCEPTED',
+        OR: [
+          { user1Id: session.user.id },
+          { user2Id: session.user.id },
+        ],
+      },
+      include: {
+        user1: { select: { id: true, name: true, email: true } },
+        user2: { select: { id: true, name: true, email: true } },
+      },
+    }),
+  ]);
 
   const locale = user?.locale || 'he';
-
-  // Check if user has an active partnership
-  const partnership = await prisma.partnership.findFirst({
-    where: {
-      status: 'ACCEPTED',
-      OR: [
-        { user1Id: session.user.id },
-        { user2Id: session.user.id },
-      ],
-    },
-    include: {
-      user1: {
-        select: {
-          id: true,
-          name: true,
-          email: true,
-        },
-      },
-      user2: {
-        select: {
-          id: true,
-          name: true,
-          email: true,
-        },
-      },
-    },
-  });
 
   const partner = partnership
     ? (partnership.user1Id === session.user.id ? partnership.user2 : partnership.user1)
@@ -93,23 +85,31 @@ export default async function DashboardPage({
 
   const hasPartner = !!partner;
 
-  // Build group data - always includes current user, plus partner if exists
-  const members = [];
+  // Phase 3: Month states + group snapshots in parallel
+  const allMemberIds = [session.user.id, ...(partner ? [partner.id] : [])];
 
-  // Get current user's data
-  const myMonthState = await calculateCurrentMonthState(session.user.id, selectedMonth);
+  const [myMonthState, partnerMonthState, groupSnapshots] = await Promise.all([
+    calculateCurrentMonthState(session.user.id, selectedMonth),
+    partner ? calculateCurrentMonthState(partner.id, selectedMonth) : null,
+    prisma.groupPaymentSnapshot.findMany({
+      where: {
+        month: selectedMonth,
+        members: { some: { userId: { in: allMemberIds } } },
+      },
+      include: { members: true },
+      orderBy: { paidAt: 'asc' },
+    }),
+  ]);
 
-  members.push({
+  // Build group data
+  const members: GroupMember[] = [{
     userId: session.user.id,
     name: user?.name || '',
     email: session.user.email || '',
     monthState: myMonthState,
-  });
+  }];
 
-  // Add partner if exists
-  if (partner) {
-    const partnerMonthState = await calculateCurrentMonthState(partner.id, selectedMonth);
-
+  if (partner && partnerMonthState) {
     members.push({
       userId: partner.id,
       name: partner.name || '',
@@ -117,19 +117,6 @@ export default async function DashboardPage({
       monthState: partnerMonthState,
     });
   }
-
-  // Get all member IDs
-  const allMemberIds = members.map(m => m.userId);
-
-  // Fetch group snapshots for this month
-  const groupSnapshots = await prisma.groupPaymentSnapshot.findMany({
-    where: {
-      month: selectedMonth,
-      members: { some: { userId: { in: allMemberIds } } }
-    },
-    include: { members: true },
-    orderBy: { paidAt: 'asc' }
-  });
 
   // Filter to snapshots that match EXACTLY this group composition
   const exactGroupSnapshots = groupSnapshots.filter(snapshot => {

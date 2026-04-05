@@ -5,6 +5,7 @@ import { signIn } from 'next-auth/react';
 import { useTranslations } from 'next-intl';
 import { Link, useRouter } from '@/i18n/routing';
 import { useSearchParams } from 'next/navigation';
+import Script from 'next/script';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
 import TelegramAuth from '@/components/TelegramAuth';
 
@@ -82,6 +83,7 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      <Script src="https://telegram.org/js/telegram-web-app.js" strategy="afterInteractive" />
       {/* Header */}
       <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 py-4">
         <div className="max-w-7xl mx-auto flex justify-between items-center">

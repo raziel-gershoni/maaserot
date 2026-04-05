@@ -1,33 +1,35 @@
 import { redirect } from 'next/navigation';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { calculateGroupMonthState } from '@/lib/monthState';
+import { calculateGroupMonthStatesInBatch } from '@/lib/monthState';
 import { getTranslations } from 'next-intl/server';
 import HistoryList from '@/components/HistoryList';
 
 export default async function HistoryPage() {
-  const session = await auth();
+  const [session, t] = await Promise.all([
+    auth(),
+    getTranslations('history'),
+  ]);
 
   if (!session?.user?.id) {
     redirect('/login');
   }
 
-  const t = await getTranslations('history');
-
-  // Get all distinct months that have incomes or snapshots
-  const incomeMonths = await prisma.income.findMany({
-    where: { userId: session.user.id },
-    select: { month: true },
-    distinct: ['month']
-  });
-
-  const snapshotMonths = await prisma.groupPaymentSnapshot.findMany({
-    where: {
-      members: { some: { userId: session.user.id } }
-    },
-    select: { month: true },
-    distinct: ['month']
-  });
+  // Get all distinct months that have incomes or snapshots in parallel
+  const [incomeMonths, snapshotMonths] = await Promise.all([
+    prisma.income.findMany({
+      where: { userId: session.user.id },
+      select: { month: true },
+      distinct: ['month'],
+    }),
+    prisma.groupPaymentSnapshot.findMany({
+      where: {
+        members: { some: { userId: session.user.id } },
+      },
+      select: { month: true },
+      distinct: ['month'],
+    }),
+  ]);
 
   // Combine and deduplicate months, then sort descending
   const allMonthsSet = new Set<string>([
@@ -36,13 +38,8 @@ export default async function HistoryPage() {
   ]);
   const months = Array.from(allMonthsSet).sort().reverse();
 
-  // Calculate state for each month
-  const monthStates = await Promise.all(
-    months.map(async (month) => {
-      const state = await calculateGroupMonthState(session.user.id, month);
-      return { month, ...state };
-    })
-  );
+  // Batch calculate all month states (3-5 queries total instead of 3N+)
+  const monthStates = await calculateGroupMonthStatesInBatch(session.user.id, months);
 
   // Collect all unique member IDs from all snapshots
   const allMemberIds = new Set<string>();
@@ -54,22 +51,23 @@ export default async function HistoryPage() {
     }
   }
 
-  // Fetch all member names in a single query
-  const members = await prisma.user.findMany({
-    where: { id: { in: Array.from(allMemberIds) } },
-    select: { id: true, name: true, email: true }
-  });
+  // Fetch member names and user locale in parallel
+  const [members, user] = await Promise.all([
+    prisma.user.findMany({
+      where: { id: { in: Array.from(allMemberIds) } },
+      select: { id: true, name: true, email: true },
+    }),
+    prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { locale: true },
+    }),
+  ]);
 
   // Build a map of userId -> display name
   const memberNameMap: Record<string, string> = {};
   for (const member of members) {
     memberNameMap[member.id] = member.name || member.email;
   }
-
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: { locale: true },
-  });
 
   const locale = user?.locale || 'he';
 
