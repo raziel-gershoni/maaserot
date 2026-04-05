@@ -6,12 +6,15 @@ const APP_URL = process.env.NEXTAUTH_URL || 'https://maaserot.vercel.app';
  * Send a Telegram message with an optional "Open App" button.
  * Returns false silently if TELEGRAM_BOT_TOKEN is not configured.
  */
-async function sendTelegramMessage(chatId: bigint, text: string): Promise<boolean> {
+async function sendTelegramMessage(chatId: bigint, text: string, locale: string): Promise<boolean> {
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
   if (!botToken) {
     console.log(`[DEV MODE] Would send Telegram message to ${chatId}: ${text}`);
     return false;
   }
+
+  const buttonText = locale === 'he' ? '📊 פתח מעשרות' : '📊 Open Maaserot';
+  const buttonUrl = `${APP_URL}/${locale}/income`;
 
   try {
     const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
@@ -23,7 +26,7 @@ async function sendTelegramMessage(chatId: bigint, text: string): Promise<boolea
         parse_mode: 'HTML',
         reply_markup: {
           inline_keyboard: [
-            [{ text: '📊 Open Maaserot', web_app: { url: APP_URL } }],
+            [{ text: buttonText, web_app: { url: buttonUrl } }],
           ],
         },
       }),
@@ -59,7 +62,7 @@ export async function notifyPartnerIncomeAdded(
     ? `${senderName} הוסיף/ה הכנסה של ${amount}.\nהמעשר שנותר לתשלום: ${unpaid}`
     : `${senderName} added ${amount} income.\nMaaser remaining: ${unpaid}`;
 
-  return sendTelegramMessage(partnerTelegramId, text);
+  return sendTelegramMessage(partnerTelegramId, text, partnerLocale);
 }
 
 /**
@@ -82,5 +85,5 @@ export async function sendIncomeReminder(
     ? `${senderName} מבקש/ת שתוסיף/י הכנסות לחודש ${monthLabel}`
     : `${senderName} is asking you to add income for ${monthLabel}`;
 
-  return sendTelegramMessage(partnerTelegramId, text);
+  return sendTelegramMessage(partnerTelegramId, text, partnerLocale);
 }
