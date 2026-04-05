@@ -73,7 +73,10 @@
     "confirmPayment": "אשר תשלום",
     "creditMessage": "זיכוי של {amount} יחול על הכנסות עתידיות החודש",
     "previousMonth": "חודש קודם",
-    "nextMonth": "חודש הבא"
+    "nextMonth": "חודש הבא",
+    "remindPartner": "תזכורת להוספת הכנסות",
+    "reminderSent": "התזכורת נשלחה!",
+    "reminderFailed": "השליחה נכשלה"
   },
   "income": {
     "title": "הכנסות",

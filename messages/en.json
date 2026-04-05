@@ -73,7 +73,10 @@
     "confirmPayment": "Confirm Payment",
     "creditMessage": "Credit of {amount} will apply to future income this month",
     "previousMonth": "Previous month",
-    "nextMonth": "Next month"
+    "nextMonth": "Next month",
+    "remindPartner": "Remind to add income",
+    "reminderSent": "Reminder sent!",
+    "reminderFailed": "Failed to send"
   },
   "income": {
     "title": "Income",

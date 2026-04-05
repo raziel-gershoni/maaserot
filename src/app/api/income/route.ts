@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { getCurrentMonth } from '@/lib/calculations';
+import { calculateCurrentMonthState } from '@/lib/monthState';
+import { notifyPartnerIncomeAdded } from '@/lib/telegramNotify';
 
 export async function GET(request: Request) {
   try {
@@ -62,6 +64,11 @@ export async function POST(request: Request) {
       },
     });
 
+    // Fire-and-forget: notify partner via Telegram
+    notifyPartner(session.user.id, month, income.amount).catch((err) =>
+      console.error('Partner notification error:', err)
+    );
+
     return NextResponse.json({ income }, { status: 201 });
   } catch (error) {
     console.error('Error creating income:', error);
@@ -70,6 +77,46 @@ export async function POST(request: Request) {
       { status: 500 }
     );
   }
+}
+
+async function notifyPartner(userId: string, month: string, incomeAmount: number) {
+  // Find accepted partnership
+  const partnership = await prisma.partnership.findFirst({
+    where: {
+      status: 'ACCEPTED',
+      OR: [{ user1Id: userId }, { user2Id: userId }],
+    },
+    include: {
+      user1: { select: { id: true, name: true, telegramId: true, locale: true } },
+      user2: { select: { id: true, name: true, telegramId: true, locale: true } },
+    },
+  });
+
+  if (!partnership) return;
+
+  const sender = partnership.user1Id === userId ? partnership.user1 : partnership.user2;
+  const partner = partnership.user1Id === userId ? partnership.user2 : partnership.user1;
+
+  if (!partner.telegramId) return;
+
+  // Calculate group unpaid for the notification message
+  const [myState, partnerState] = await Promise.all([
+    calculateCurrentMonthState(userId, month),
+    calculateCurrentMonthState(partner.id, month),
+  ]);
+
+  const totalMaaser = myState.totalMaaser + partnerState.totalMaaser;
+  const totalFixed = myState.fixedCharitiesTotal + partnerState.fixedCharitiesTotal;
+  const totalPaid = myState.totalPaid + partnerState.totalPaid;
+  const groupUnpaid = Math.max(0, totalMaaser - totalFixed - totalPaid);
+
+  await notifyPartnerIncomeAdded(
+    partner.telegramId,
+    partner.locale || 'he',
+    sender.name || 'Partner',
+    incomeAmount,
+    groupUnpaid,
+  );
 }
 
 export async function PATCH(request: Request) {

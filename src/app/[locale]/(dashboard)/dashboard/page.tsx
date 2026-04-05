@@ -6,6 +6,7 @@ import { calculateCurrentMonthState } from '@/lib/monthState';
 import { getTranslations } from 'next-intl/server';
 import GroupPaymentModal from '@/components/GroupPaymentModal';
 import MonthNavigator from '@/components/MonthNavigator';
+import RemindPartnerButton from '@/components/RemindPartnerButton';
 
 interface MonthState {
   totalMaaser: number;
@@ -71,8 +72,8 @@ export default async function DashboardPage({
         ],
       },
       include: {
-        user1: { select: { id: true, name: true, email: true } },
-        user2: { select: { id: true, name: true, email: true } },
+        user1: { select: { id: true, name: true, email: true, telegramId: true } },
+        user2: { select: { id: true, name: true, email: true, telegramId: true } },
       },
     }),
   ]);
@@ -84,6 +85,7 @@ export default async function DashboardPage({
     : null;
 
   const hasPartner = !!partner;
+  const hasPartnerTelegram = !!partner?.telegramId;
 
   // Phase 3: Month states + group snapshots in parallel
   const allMemberIds = [session.user.id, ...(partner ? [partner.id] : [])];
@@ -119,8 +121,8 @@ export default async function DashboardPage({
   }
 
   // Filter to snapshots that match EXACTLY this group composition
-  const exactGroupSnapshots = groupSnapshots.filter(snapshot => {
-    const snapshotMemberIds = snapshot.members.map(m => m.userId).sort();
+  const exactGroupSnapshots = groupSnapshots.filter((snapshot: typeof groupSnapshots[number]) => {
+    const snapshotMemberIds = snapshot.members.map((m: { userId: string }) => m.userId).sort();
     const currentMemberIds = allMemberIds.sort();
     return JSON.stringify(snapshotMemberIds) === JSON.stringify(currentMemberIds);
   });
@@ -241,7 +243,18 @@ export default async function DashboardPage({
             {/* Member Breakdown - Only show when there is a partner */}
             {hasPartner && (
               <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 md:p-8 border border-gray-200 dark:border-gray-700">
-                <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">{t('partnerBreakdown')}</h3>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-xl font-bold text-gray-900 dark:text-white">{t('partnerBreakdown')}</h3>
+                  {hasPartnerTelegram && (
+                    <RemindPartnerButton
+                      translations={{
+                        remindPartner: t('remindPartner'),
+                        reminderSent: t('reminderSent'),
+                        reminderFailed: t('reminderFailed'),
+                      }}
+                    />
+                  )}
+                </div>
               <div className="space-y-4">
                 {groupData.members.map((member: GroupMember) => (
                   <div key={member.userId} className="p-4 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700">
