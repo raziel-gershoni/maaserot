@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Maaserot is a charity (maaser) tracking web application that helps users calculate their monthly charity obligations based on their income. Built with Next.js 14, TypeScript, Prisma, and PostgreSQL.
+Maaserot is a charity (maaser) tracking web application that helps users calculate their monthly charity obligations based on their income. Built with Next.js 16, TypeScript, Prisma, and PostgreSQL.
 
 ## Core Concepts
 
@@ -108,7 +108,7 @@ npm run lint
 ## Architecture
 
 ### Tech Stack
-- **Framework**: Next.js 14 (App Router)
+- **Framework**: Next.js 16 (App Router)
 - **Database**: PostgreSQL (Neon)
 - **ORM**: Prisma
 - **Auth**: NextAuth.js v5 (credentials provider)
