@@ -1,8 +1,10 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { useRouter } from '@/i18n/routing';
-import { formatCurrency } from '@/lib/calculations';
+import { translateApiError } from '@/lib/errorCodes';
+import { Alert, Button, Dialog, Money } from '@/components/ui';
 
 interface GroupPaymentModalProps {
   month: string;
@@ -22,25 +24,109 @@ interface GroupPaymentModalProps {
   };
 }
 
-export default function GroupPaymentModal({ month, totalUnpaid, locale, label, memberIds, translations }: GroupPaymentModalProps) {
+/** The slider moves in whole shekels. */
+const STEP = 100;
+/** Headroom offered above what is owed, and the whole range in advance mode. */
+const HEADROOM = 10000;
+
+const roundUpToStep = (agorot: number) => Math.ceil(agorot / STEP) * STEP;
+
+function MinusIcon() {
+  return (
+    <svg
+      className="h-5 w-5"
+      viewBox="0 0 20 20"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      aria-hidden="true"
+    >
+      <path d="M5 10h10" />
+    </svg>
+  );
+}
+
+function PlusIcon() {
+  return (
+    <svg
+      className="h-5 w-5"
+      viewBox="0 0 20 20"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      aria-hidden="true"
+    >
+      <path d="M10 5v10M5 10h10" />
+    </svg>
+  );
+}
+
+export default function GroupPaymentModal({
+  month,
+  totalUnpaid,
+  locale,
+  label,
+  memberIds,
+  translations,
+}: GroupPaymentModalProps) {
+  const t = useTranslations('dashboard');
+  const tCommon = useTranslations('common');
+  const tErrors = useTranslations('errors');
+
   const [isOpen, setIsOpen] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState(totalUnpaid);
   const [isLoading, setIsLoading] = useState(false);
   const [isEditingAmount, setIsEditingAmount] = useState(false);
   const [editValue, setEditValue] = useState('');
+  const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
   // Handle advance payments (when totalUnpaid = 0)
   const isAdvancePayment = totalUnpaid === 0;
-  // Allow overpayment - slider max is 2x unpaid, buttons can go higher
-  // For advance payments, provide a reasonable range (10000 agorot = 100 shekel)
-  const sliderMax = isAdvancePayment ? 10000 : Math.max(totalUnpaid * 2, totalUnpaid + 10000);
+
+  // The track always offers room to overpay: twice what is owed, or a shekel
+  // hundred above it, whichever is further. In advance mode there is nothing
+  // owed, so the whole track is headroom.
+  const baseMax = roundUpToStep(
+    isAdvancePayment ? HEADROOM : Math.max(totalUnpaid * 2, totalUnpaid + HEADROOM)
+  );
+
+  // The end label has to describe the real track, so the maximum is state: the
+  // steppers and the manual entry can push past `baseMax`, and when they do the
+  // track grows with them rather than pinning the thumb and lying about it. It
+  // only ever grows within an open modal, so dragging back never rescales
+  // underneath the thumb.
+  const [sliderMax, setSliderMax] = useState(baseMax);
+
+  const applyAmount = (next: number) => {
+    const clamped = Math.max(0, Math.round(next));
+    setPaymentAmount(clamped);
+    setSliderMax((current) => Math.max(current, roundUpToStep(clamped)));
+  };
+
   const overpaymentAmount = Math.max(0, paymentAmount - totalUnpaid);
+  const remainingAfter = Math.max(0, totalUnpaid - paymentAmount);
+  const isFullRemaining = !isAdvancePayment && paymentAmount === totalUnpaid;
+
+  // Where "everything still owed" falls on the track. The thumb is 1.375rem
+  // wide and its centre travels between half a thumb from each end, so the mark
+  // has to follow the same inset to line up with it.
+  const remainingPct = sliderMax > 0 ? Math.min(100, (totalUnpaid / sliderMax) * 100) : 0;
+  const remainingMarkOffset = `calc(0.6875rem + ${remainingPct}% - ${(
+    remainingPct * 0.01375
+  ).toFixed(4)}rem)`;
+
+  // "…credit of {amount} will apply…" — the amount is a real <Money>, spliced
+  // into the sentence rather than string-formatted into it.
+  const [creditBefore, creditAfter = ''] = translations.creditMessage.split('{amount}');
 
   const handlePayment = async () => {
     if (paymentAmount <= 0) return;
 
     setIsLoading(true);
+    setError(null);
     try {
       const response = await fetch('/api/payment/unified', {
         method: 'POST',
@@ -56,13 +142,11 @@ export default function GroupPaymentModal({ month, totalUnpaid, locale, label, m
         setIsOpen(false);
         router.refresh();
       } else {
-        const error = await response.json();
-        console.error('Failed to process group payment:', error);
-        alert('Failed to process group payment: ' + (error.error || 'Unknown error'));
+        const data = await response.json().catch(() => null);
+        setError(translateApiError(tErrors, data?.error));
       }
-    } catch (error) {
-      console.error('Error processing group payment:', error);
-      alert('Error processing group payment');
+    } catch {
+      setError(translateApiError(tErrors, undefined));
     } finally {
       setIsLoading(false);
     }
@@ -71,129 +155,228 @@ export default function GroupPaymentModal({ month, totalUnpaid, locale, label, m
   const handleOpenModal = () => {
     // For advance payments (totalUnpaid = 0), start at 0; otherwise reset to unpaid amount
     setPaymentAmount(isAdvancePayment ? 0 : totalUnpaid);
+    setSliderMax(baseMax);
+    setIsEditingAmount(false);
+    setError(null);
     setIsOpen(true);
+  };
+
+  const handleClose = () => {
+    if (isLoading) return;
+    setIsEditingAmount(false);
+    setIsOpen(false);
   };
 
   return (
     <>
-      <button
+      <Button
+        variant={isAdvancePayment ? 'secondary' : 'primary'}
+        size={isAdvancePayment ? 'md' : 'lg'}
         onClick={handleOpenModal}
-        className="px-6 py-3 bg-purple-600 hover:bg-purple-700 dark:bg-purple-700 dark:hover:bg-purple-600 text-white rounded-lg font-bold text-base shadow-md transition active:scale-95"
       >
         {label}
-      </button>
+      </Button>
 
-      {isOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-md w-full p-6">
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
-              {translations.title}
-            </h2>
+      {/* The proportional-split explanation is only true of an actual group. */}
+      <Dialog
+        open={isOpen}
+        onClose={handleClose}
+        title={translations.title}
+        description={memberIds.length > 1 ? translations.description : undefined}
+        closeLabel={tCommon('close')}
+        footer={
+          <div className="flex flex-wrap gap-3">
+            <Button
+              variant="secondary"
+              className="min-w-0 grow basis-32"
+              onClick={handleClose}
+              disabled={isLoading}
+            >
+              {translations.cancel}
+            </Button>
+            <Button
+              className="min-w-0 grow basis-32"
+              onClick={handlePayment}
+              disabled={paymentAmount <= 0}
+              pending={isLoading}
+              pendingLabel={translations.processing}
+            >
+              {translations.confirmPayment}
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-5">
+          {error ? <Alert tone="error">{error}</Alert> : null}
 
-            <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-              {translations.description}
-            </p>
+          <div>
+            <p className="text-sm text-ink-muted">{translations.amountToPay}</p>
 
-            <div className="mb-6">
-              <div className="mb-4">
-                <div className="text-sm text-gray-600 dark:text-gray-400 mb-2">{translations.amountToPay}</div>
-                <div className="flex items-center justify-center gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setPaymentAmount(Math.max(0, paymentAmount - 100))}
-                    disabled={paymentAmount <= 0}
-                    className="w-12 h-12 flex items-center justify-center bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-900 dark:text-white rounded-lg font-bold text-2xl disabled:opacity-30 disabled:cursor-not-allowed transition active:scale-95"
-                  >
-                    ↓
-                  </button>
-                  {isEditingAmount ? (
-                    <input
-                      type="number"
-                      inputMode="decimal"
-                      autoFocus
-                      value={editValue}
-                      onChange={(e) => setEditValue(e.target.value)}
-                      onBlur={() => {
-                        const parsed = parseFloat(editValue);
-                        setPaymentAmount(isNaN(parsed) || parsed < 0 ? 0 : Math.round(parsed * 100));
-                        setIsEditingAmount(false);
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          (e.target as HTMLInputElement).blur();
-                        }
-                      }}
-                      className="text-3xl font-bold text-purple-600 dark:text-purple-400 min-w-[140px] w-[140px] text-center bg-transparent border-b-2 border-purple-600 dark:border-purple-400 outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                    />
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEditValue((paymentAmount / 100).toString());
-                        setIsEditingAmount(true);
-                      }}
-                      className="text-3xl font-bold text-purple-600 dark:text-purple-400 min-w-[140px] text-center cursor-text hover:underline decoration-purple-400/50 underline-offset-4"
-                    >
-                      {formatCurrency(paymentAmount, locale)}
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => setPaymentAmount(paymentAmount + 100)}
-                    className="w-12 h-12 flex items-center justify-center bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-900 dark:text-white rounded-lg font-bold text-2xl transition active:scale-95"
-                  >
-                    ↑
-                  </button>
-                </div>
-              </div>
+            <div className="mt-2 flex items-center justify-center gap-3">
+              <Button
+                icon
+                variant="secondary"
+                aria-label={t('decreaseAmount')}
+                onClick={() => applyAmount(paymentAmount - STEP)}
+                disabled={paymentAmount <= 0}
+              >
+                <MinusIcon />
+              </Button>
 
+              {/* The editable figure sizes to its own content: the old fixed
+                  140px could not hold ₪12,345.67 once he-IL adds bidi marks. */}
+              {isEditingAmount ? (
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  autoFocus
+                  aria-label={t('paymentAmount')}
+                  value={editValue}
+                  onChange={(e) => setEditValue(e.target.value)}
+                  onBlur={() => {
+                    const parsed = parseFloat(editValue);
+                    applyAmount(isNaN(parsed) || parsed < 0 ? 0 : parsed * 100);
+                    setIsEditingAmount(false);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      (e.target as HTMLInputElement).blur();
+                    }
+                  }}
+                  style={{
+                    width: `${Math.min(Math.max(editValue.length + 2, 6), 14)}ch`,
+                  }}
+                  className="tabular border-b-2 border-brand bg-transparent text-center font-display text-figure font-semibold text-brand outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                />
+              ) : (
+                <button
+                  type="button"
+                  aria-label={t('editAmount')}
+                  onClick={() => {
+                    setEditValue((paymentAmount / 100).toString());
+                    setIsEditingAmount(true);
+                  }}
+                  className="cursor-text rounded-control px-1 underline-offset-4 decoration-brand/40 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                >
+                  <Money
+                    agorot={paymentAmount}
+                    locale={locale}
+                    size="md"
+                    tone="brand"
+                  />
+                </button>
+              )}
+
+              <Button
+                icon
+                variant="secondary"
+                aria-label={t('increaseAmount')}
+                onClick={() => applyAmount(paymentAmount + STEP)}
+              >
+                <PlusIcon />
+              </Button>
+            </div>
+          </div>
+
+          <div>
+            <div className="relative">
               <input
                 type="range"
                 min="0"
                 max={sliderMax}
-                step="100"
+                step={STEP}
                 value={Math.min(paymentAmount, sliderMax)}
-                onChange={(e) => setPaymentAmount(parseInt(e.target.value))}
-                className="w-full h-4 md:h-3 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-purple-600 touch-none"
+                aria-label={t('paymentAmount')}
+                onChange={(e) => applyAmount(parseInt(e.target.value, 10))}
+                className="slider-brand block w-full touch-none"
                 style={{ WebkitTapHighlightColor: 'transparent' }}
               />
+              {!isAdvancePayment ? (
+                <span
+                  aria-hidden="true"
+                  className="pointer-events-none absolute top-1/2 h-3 w-0.5 -translate-y-1/2 rounded-full bg-brand/70"
+                  style={{
+                    insetInlineStart: remainingMarkOffset,
+                    marginInlineStart: '-1px',
+                  }}
+                />
+              ) : null}
+            </div>
 
-              <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 mt-1">
-                <span>{formatCurrency(0, locale)}</span>
-                <span>{formatCurrency(totalUnpaid, locale)}</span>
+            {/* The ends of the label row are the ends of the track — the old
+                copy printed the unpaid total at a maximum it never described. */}
+            <div className="mt-1 flex items-center justify-between gap-3 text-xs text-ink-faint">
+              <Money
+                agorot={0}
+                locale={locale}
+                size="inherit"
+                tone="inherit"
+                weight="font-medium"
+                className="text-xs"
+              />
+              <Money
+                agorot={sliderMax}
+                locale={locale}
+                size="inherit"
+                tone="inherit"
+                weight="font-medium"
+                className="text-xs"
+              />
+            </div>
+
+            {!isAdvancePayment ? (
+              <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">
+                <Button
+                  size="sm"
+                  variant={isFullRemaining ? 'primary' : 'secondary'}
+                  aria-pressed={isFullRemaining}
+                  onClick={() => applyAmount(totalUnpaid)}
+                >
+                  <span>{t('fullRemaining')}</span>
+                  <Money
+                    agorot={totalUnpaid}
+                    locale={locale}
+                    size="inherit"
+                    tone="inherit"
+                    className="text-sm"
+                  />
+                </Button>
+                {remainingAfter > 0 ? (
+                  <span className="text-xs text-ink-muted">
+                    {t('remainingAfter')}{' '}
+                    <Money
+                      agorot={remainingAfter}
+                      locale={locale}
+                      size="inherit"
+                      tone="inherit"
+                      className="text-xs"
+                    />
+                  </span>
+                ) : null}
               </div>
-
-              {(isAdvancePayment || overpaymentAmount > 0) && (
-                <div className="mt-3 p-2 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-lg">
-                  <p className="text-sm text-blue-700 dark:text-blue-300 text-center">
-                    {isAdvancePayment
-                      ? translations.advancePaymentCredit
-                      : translations.creditMessage.replace('{amount}', formatCurrency(overpaymentAmount, locale))
-                    }
-                  </p>
-                </div>
-              )}
-            </div>
-
-            <div className="flex gap-3">
-              <button
-                onClick={() => setIsOpen(false)}
-                disabled={isLoading}
-                className="flex-1 px-4 py-2 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-900 dark:text-white rounded-lg font-semibold transition disabled:opacity-50"
-              >
-                {translations.cancel}
-              </button>
-              <button
-                onClick={handlePayment}
-                disabled={isLoading || paymentAmount <= 0}
-                className="flex-1 px-4 py-2 bg-purple-600 hover:bg-purple-700 dark:bg-purple-700 dark:hover:bg-purple-600 text-white rounded-lg font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isLoading ? translations.processing : translations.confirmPayment}
-              </button>
-            </div>
+            ) : null}
           </div>
+
+          {isAdvancePayment || overpaymentAmount > 0 ? (
+            <Alert tone="info">
+              {isAdvancePayment ? (
+                translations.advancePaymentCredit
+              ) : (
+                <span>
+                  {creditBefore}
+                  <Money
+                    agorot={overpaymentAmount}
+                    locale={locale}
+                    size="inherit"
+                    tone="inherit"
+                  />
+                  {creditAfter}
+                </span>
+              )}
+            </Alert>
+          ) : null}
         </div>
-      )}
+      </Dialog>
     </>
   );
 }

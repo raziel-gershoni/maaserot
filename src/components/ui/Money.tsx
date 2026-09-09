@@ -47,9 +47,13 @@ export function Money({
   }).formatToParts(agorot / 100);
 
   return (
+    // Plain inline spans, never flex. `formatToParts` returns parts in logical
+    // order, and inline layout lets the bidi algorithm place them exactly as it
+    // would the concatenated string. A flex container orders its children by
+    // `direction` instead, which under dir="rtl" renders 620.00 as 00.620.
     <bdi
       className={cn(
-        'tabular inline-flex items-baseline font-display',
+        'tabular font-display',
         SIZES[size],
         TONES[tone],
         weight,

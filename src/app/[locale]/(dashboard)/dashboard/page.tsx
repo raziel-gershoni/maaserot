@@ -1,9 +1,26 @@
+import { Suspense } from 'react';
 import { redirect } from 'next/navigation';
+import { getTranslations } from 'next-intl/server';
+import { Link } from '@/i18n/routing';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { getCurrentMonth, formatCurrency } from '@/lib/calculations';
+import { getCurrentMonth } from '@/lib/calculations';
 import { calculateCurrentMonthState } from '@/lib/monthState';
-import { getTranslations } from 'next-intl/server';
+import { translateApiError } from '@/lib/errorCodes';
+import {
+  Alert,
+  Badge,
+  buttonStyles,
+  Card,
+  CardHeader,
+  EmptyState,
+  Figure,
+  PageHeader,
+  ReckoningBar,
+  SectionRule,
+  Skeleton,
+  SkeletonRows,
+} from '@/components/ui';
 import GroupPaymentModal from '@/components/GroupPaymentModal';
 import MonthNavigator from '@/components/MonthNavigator';
 import RemindPartnerButton from '@/components/RemindPartnerButton';
@@ -22,54 +39,110 @@ interface GroupMember {
   monthState: MonthState;
 }
 
-export default async function DashboardPage({
-  searchParams,
+/* -------------------------------------------------------------------------- */
+/* Icons — non-directional, so no rtl:rotate-180 needed.                       */
+/* -------------------------------------------------------------------------- */
+
+function CheckIcon() {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      className="h-3.5 w-3.5"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M3 8.5l3.5 3.5L13 5" />
+    </svg>
+  );
+}
+
+function ClockIcon() {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      className="h-3.5 w-3.5"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="8" cy="8" r="6" />
+      <path d="M8 4.5V8l2.25 1.5" />
+    </svg>
+  );
+}
+
+function PlusIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className="h-5 w-5"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      aria-hidden="true"
+    >
+      <path d="M12 5v14M5 12h14" />
+    </svg>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Pieces                                                                      */
+/* -------------------------------------------------------------------------- */
+
+/** A quiet supporting figure. Everything here sits below the hero number. */
+function StatTile({
+  label,
+  agorot,
+  locale,
+  tone = 'default',
 }: {
-  searchParams: Promise<{ month?: string }>;
+  label: string;
+  agorot: number;
+  locale: string;
+  tone?: 'default' | 'muted' | 'positive';
 }) {
-  // Phase 1: Auth + translations in parallel
-  const [session, t, params] = await Promise.all([
-    auth(),
-    getTranslations('dashboard'),
-    searchParams,
-  ]);
+  return (
+    <div className="rounded-row bg-surface-sunken p-4">
+      <Figure label={label} agorot={agorot} locale={locale} size="sm" tone={tone} />
+    </div>
+  );
+}
 
-  if (!session?.user?.id) {
-    redirect('/login');
-  }
+function formatMonthLabel(month: string, locale: string) {
+  const [y, m] = month.split('-');
+  return new Date(parseInt(y), parseInt(m) - 1).toLocaleDateString(
+    locale === 'he' ? 'he-IL' : 'en-US',
+    { year: 'numeric', month: 'long' }
+  );
+}
 
-  const maxMonth = getCurrentMonth();
-  const monthParam = params.month;
+/* -------------------------------------------------------------------------- */
+/* Data                                                                        */
+/* -------------------------------------------------------------------------- */
 
-  // Validate month param: must be YYYY-MM format and not in the future
-  const isValidMonth = monthParam && /^\d{4}-\d{2}$/.test(monthParam) && monthParam <= maxMonth;
-  const selectedMonth = isValidMonth ? monthParam : maxMonth;
-
-  // Prepare translations for client components (will be finalized after hasPartner is known)
-  const getPaymentModalTranslations = (isGroup: boolean) => ({
-    title: isGroup ? t('groupPayment') : t('paymentAmount'),
-    description: t('groupPaymentDescription'),
-    amountToPay: t('amountToPay'),
-    cancel: t('cancel'),
-    processing: t('processing'),
-    confirmPayment: t('confirmPayment'),
-    advancePaymentCredit: t('advancePaymentCredit'),
-    creditMessage: t('creditMessage'),
-  });
-
-  // Phase 2: User data + partnership in parallel
+async function loadDashboard(
+  userId: string,
+  sessionEmail: string,
+  selectedMonth: string
+) {
   const [user, partnership] = await Promise.all([
     prisma.user.findUnique({
-      where: { id: session.user.id },
+      where: { id: userId },
       select: { locale: true, name: true },
     }),
     prisma.partnership.findFirst({
       where: {
         status: 'ACCEPTED',
-        OR: [
-          { user1Id: session.user.id },
-          { user2Id: session.user.id },
-        ],
+        OR: [{ user1Id: userId }, { user2Id: userId }],
       },
       include: {
         user1: { select: { id: true, name: true, email: true, telegramId: true } },
@@ -81,17 +154,18 @@ export default async function DashboardPage({
   const locale = user?.locale || 'he';
 
   const partner = partnership
-    ? (partnership.user1Id === session.user.id ? partnership.user2 : partnership.user1)
+    ? partnership.user1Id === userId
+      ? partnership.user2
+      : partnership.user1
     : null;
 
   const hasPartner = !!partner;
   const hasPartnerTelegram = !!partner?.telegramId;
 
-  // Phase 3: Month states + group snapshots in parallel
-  const allMemberIds = [session.user.id, ...(partner ? [partner.id] : [])];
+  const allMemberIds = [userId, ...(partner ? [partner.id] : [])];
 
   const [myMonthState, partnerMonthState, groupSnapshots] = await Promise.all([
-    calculateCurrentMonthState(session.user.id, selectedMonth),
+    calculateCurrentMonthState(userId, selectedMonth),
     partner ? calculateCurrentMonthState(partner.id, selectedMonth) : null,
     prisma.groupPaymentSnapshot.findMany({
       where: {
@@ -103,13 +177,14 @@ export default async function DashboardPage({
     }),
   ]);
 
-  // Build group data
-  const members: GroupMember[] = [{
-    userId: session.user.id,
-    name: user?.name || '',
-    email: session.user.email || '',
-    monthState: myMonthState,
-  }];
+  const members: GroupMember[] = [
+    {
+      userId,
+      name: user?.name || '',
+      email: sessionEmail,
+      monthState: myMonthState,
+    },
+  ];
 
   if (partner && partnerMonthState) {
     members.push({
@@ -120,14 +195,17 @@ export default async function DashboardPage({
     });
   }
 
-  // Filter to snapshots that match EXACTLY this group composition
-  const exactGroupSnapshots = groupSnapshots.filter((snapshot: typeof groupSnapshots[number]) => {
-    const snapshotMemberIds = snapshot.members.map((m: { userId: string }) => m.userId).sort();
-    const currentMemberIds = allMemberIds.sort();
-    return JSON.stringify(snapshotMemberIds) === JSON.stringify(currentMemberIds);
-  });
+  // Only snapshots whose member composition matches this group exactly.
+  const currentMemberIds = [...allMemberIds].sort();
+  const exactGroupSnapshots = groupSnapshots.filter(
+    (snapshot: (typeof groupSnapshots)[number]) => {
+      const snapshotMemberIds = snapshot.members
+        .map((m: { userId: string }) => m.userId)
+        .sort();
+      return JSON.stringify(snapshotMemberIds) === JSON.stringify(currentMemberIds);
+    }
+  );
 
-  // Calculate current totals
   let totalMaaser = 0;
   let totalFixedCharities = 0;
   for (const member of members) {
@@ -143,109 +221,196 @@ export default async function DashboardPage({
 
   const groupUnpaid = Math.max(0, totalMaaser - totalFixedCharities - groupPaid);
 
-  const groupData = {
-    members,
-    totals: {
-      totalMaaser,
-      totalFixedCharities,
-      totalPaid: groupPaid,
-      unpaid: groupUnpaid,
+  return {
+    locale,
+    hasPartner,
+    hasPartnerTelegram,
+    groupData: {
+      members,
+      totals: {
+        totalMaaser,
+        totalFixedCharities,
+        totalPaid: groupPaid,
+        unpaid: groupUnpaid,
+      },
     },
   };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Loading                                                                     */
+/* -------------------------------------------------------------------------- */
+
+function DashboardSkeleton() {
+  return (
+    <div className="space-y-6" aria-busy="true">
+      <div className="flex items-center justify-center">
+        <Skeleton className="h-9 w-56" />
+      </div>
+
+      <Card>
+        <Skeleton className="h-3 w-32" />
+        <Skeleton className="mt-6 h-4 w-24" />
+        <Skeleton className="mt-2 h-11 w-52" />
+        <Skeleton className="mt-6 h-2.5 w-full rounded-full" />
+        <Skeleton className="mt-3 h-3 w-3/4" />
+        <Skeleton className="mt-6 h-12 w-44" />
+        <SkeletonRows rows={3} className="mt-6" />
+      </Card>
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Body                                                                        */
+/* -------------------------------------------------------------------------- */
+
+async function DashboardBody({
+  userId,
+  sessionEmail,
+  selectedMonth,
+  maxMonth,
+}: {
+  userId: string;
+  sessionEmail: string;
+  selectedMonth: string;
+  maxMonth: string;
+}) {
+  const [t, tErrors] = await Promise.all([
+    getTranslations('dashboard'),
+    getTranslations('errors'),
+  ]);
+
+  let data: Awaited<ReturnType<typeof loadDashboard>>;
+  try {
+    data = await loadDashboard(userId, sessionEmail, selectedMonth);
+  } catch (error) {
+    // A failed read must never look like "you have nothing yet".
+    return <Alert tone="error">{translateApiError(tErrors, error)}</Alert>;
+  }
+
+  const { locale, hasPartner, hasPartnerTelegram, groupData } = data;
+  const { totals, members } = groupData;
+  const isSettled = totals.unpaid === 0;
+
+  const paymentModalTranslations = {
+    title: hasPartner ? t('groupPayment') : t('paymentAmount'),
+    description: t('groupPaymentDescription'),
+    amountToPay: t('amountToPay'),
+    cancel: t('cancel'),
+    processing: t('processing'),
+    confirmPayment: t('confirmPayment'),
+    advancePaymentCredit: t('advancePaymentCredit'),
+    creditMessage: t('creditMessage'),
+  };
+
+  const memberIds = members.map((m: GroupMember) => m.userId);
 
   return (
-    <div className="p-4 md:p-8">
-      <div className="max-w-5xl mx-auto">
-        {/* Header */}
-        <div className="mb-6 md:mb-8">
-          <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-900 dark:text-white mb-2">{t('title')}</h1>
-          <p className="text-sm sm:text-base text-gray-700 dark:text-gray-300">{t('subtitle')}</p>
-        </div>
+    <div className="space-y-6">
+      <MonthNavigator
+        currentMonth={selectedMonth}
+        maxMonth={maxMonth}
+        formattedMonth={formatMonthLabel(selectedMonth, locale)}
+        locale={locale}
+        translations={{
+          previousMonth: t('previousMonth'),
+          nextMonth: t('nextMonth'),
+          currentMonth: t('currentMonth'),
+        }}
+      />
 
-        {/* Month Navigation */}
-        <MonthNavigator
-          currentMonth={selectedMonth}
-          maxMonth={maxMonth}
-          formattedMonth={(() => {
-            const [y, m] = selectedMonth.split('-');
-            return new Date(parseInt(y), parseInt(m) - 1).toLocaleDateString(
-              locale === 'he' ? 'he-IL' : 'en-US',
-              { year: 'numeric', month: 'long' }
-            );
-          })()}
-          locale={locale}
-          translations={{
-            previousMonth: t('previousMonth'),
-            nextMonth: t('nextMonth'),
-            currentMonth: t('currentMonth'),
-          }}
-        />
+      {totals.totalMaaser > 0 ? (
+        <>
+          {/* The reckoning: one number, one measure, one action. */}
+          <Card>
+            <SectionRule
+              trailing={
+                isSettled ? (
+                  <Badge tone="success" icon={<CheckIcon />}>
+                    {t('paid')}
+                  </Badge>
+                ) : (
+                  <Badge tone="warning" icon={<ClockIcon />}>
+                    {t('unpaid')}
+                  </Badge>
+                )
+              }
+            >
+              {hasPartner ? t('groupSummary') : t('currentMonth')}
+            </SectionRule>
 
-        {/* Unified Group View - Always shown (group of 1 or N) */}
-        {groupData.totals.totalMaaser > 0 ? (
-          <div className="space-y-6 mb-6">
-            {/* Combined Metrics */}
-            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 md:p-8 border border-gray-200 dark:border-gray-700">
-              <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">
-                {hasPartner ? t('groupSummary') : t('currentMonth')}
-              </h2>
+            <Figure
+              className="mt-6"
+              label={t('extraToGive')}
+              agorot={totals.unpaid}
+              locale={locale}
+              size="lg"
+              tone={isSettled ? 'positive' : 'default'}
+              hint={isSettled ? t('nothingToPay') : undefined}
+            />
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-                <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-5 border border-gray-200 dark:border-gray-700">
-                  <p className="text-sm font-medium text-gray-800 dark:text-gray-200 mb-1">{t('totalMaaser')}</p>
-                  <p className="text-3xl font-bold text-gray-900 dark:text-gray-100">
-                    {formatCurrency(groupData.totals.totalMaaser, locale)}
-                  </p>
-                </div>
-                <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-5 border border-gray-200 dark:border-gray-700">
-                  <p className="text-sm font-medium text-gray-800 dark:text-gray-200 mb-1">{t('fixedCharities')}</p>
-                  <p className="text-3xl font-bold text-gray-900 dark:text-gray-100">
-                    {formatCurrency(groupData.totals.totalFixedCharities, locale)}
-                  </p>
-                </div>
-                <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-5 border border-gray-200 dark:border-gray-700">
-                  <p className="text-sm font-medium text-gray-800 dark:text-gray-200 mb-1">{t('totalPaid')}</p>
-                  <p className="text-3xl font-bold text-gray-900 dark:text-gray-100">
-                    {formatCurrency(groupData.totals.totalPaid, locale)}
-                  </p>
-                </div>
-              </div>
+            <ReckoningBar
+              className="mt-6"
+              totalMaaser={totals.totalMaaser}
+              fixedCharities={totals.totalFixedCharities}
+              paid={totals.totalPaid}
+              locale={locale}
+              labels={{
+                fixed: t('fixedCharities'),
+                paid: t('totalPaid'),
+                remaining: t('extraToGive'),
+                empty: t('noIncomeThisMonth'),
+              }}
+            />
 
-              <div className="bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-900/30 dark:to-purple-900/30 rounded-lg p-6 border-2 border-indigo-200 dark:border-indigo-700">
-                <p className="text-sm font-medium text-indigo-800 dark:text-indigo-200 mb-2">{t('unpaid')}</p>
-                <p className="text-4xl font-bold text-indigo-900 dark:text-indigo-100 mb-4">
-                  {formatCurrency(groupData.totals.unpaid, locale)}
-                </p>
-
-                <div className="flex items-center gap-3">
-                  <span className={`inline-block px-4 py-2 rounded-lg text-sm font-bold ${
-                    groupData.totals.unpaid === 0
-                      ? 'bg-green-600 text-white dark:bg-green-700'
-                      : 'bg-yellow-500 text-gray-900 dark:bg-yellow-600 dark:text-gray-100'
-                  }`}>
-                    {groupData.totals.unpaid === 0 ? '✓ ' + t('paid') : '⏳ ' + t('unpaid')}
-                  </span>
-                  <GroupPaymentModal
-                    month={selectedMonth}
-                    totalUnpaid={groupData.totals.unpaid}
-                    locale={locale}
-                    label={groupData.totals.unpaid > 0
-                      ? (hasPartner ? t('markGroupAsPaid') : t('markAsPaid'))
-                      : (hasPartner ? t('payGroupInAdvance') : t('payInAdvance'))
-                    }
-                    memberIds={groupData.members.map((m: GroupMember) => m.userId)}
-                    translations={getPaymentModalTranslations(hasPartner)}
-                  />
-                </div>
-              </div>
+            <div className="mt-6 flex flex-wrap gap-3">
+              <GroupPaymentModal
+                month={selectedMonth}
+                totalUnpaid={totals.unpaid}
+                locale={locale}
+                label={
+                  totals.unpaid > 0
+                    ? hasPartner
+                      ? t('markGroupAsPaid')
+                      : t('markAsPaid')
+                    : hasPartner
+                      ? t('payGroupInAdvance')
+                      : t('payInAdvance')
+                }
+                memberIds={memberIds}
+                translations={paymentModalTranslations}
+              />
             </div>
 
-            {/* Member Breakdown - Only show when there is a partner */}
-            {hasPartner && (
-              <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 md:p-8 border border-gray-200 dark:border-gray-700">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-xl font-bold text-gray-900 dark:text-white">{t('partnerBreakdown')}</h3>
-                  {hasPartnerTelegram && (
+            <div className="mt-6 grid gap-3 sm:grid-cols-3">
+              <StatTile
+                label={t('totalMaaser')}
+                agorot={totals.totalMaaser}
+                locale={locale}
+              />
+              <StatTile
+                label={t('fixedCharities')}
+                agorot={totals.totalFixedCharities}
+                locale={locale}
+                tone="muted"
+              />
+              <StatTile
+                label={t('totalPaid')}
+                agorot={totals.totalPaid}
+                locale={locale}
+                tone={totals.totalPaid > 0 ? 'positive' : 'muted'}
+              />
+            </div>
+          </Card>
+
+          {/* Who owes what — only meaningful once there is a partner. */}
+          {hasPartner && (
+            <Card>
+              <CardHeader
+                title={t('partnerBreakdown')}
+                action={
+                  hasPartnerTelegram ? (
                     <RemindPartnerButton
                       translations={{
                         remindPartner: t('remindPartner'),
@@ -253,56 +418,134 @@ export default async function DashboardPage({
                         reminderFailed: t('reminderFailed'),
                       }}
                     />
-                  )}
-                </div>
-              <div className="space-y-4">
-                {groupData.members.map((member: GroupMember) => (
-                  <div key={member.userId} className="p-4 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700">
-                    <div className="mb-3">
-                      <p className="font-semibold text-gray-900 dark:text-white">
-                        {member.name || member.email}
-                        {member.userId === session.user.id && <span className="text-sm text-gray-500 ml-2">(You)</span>}
+                  ) : undefined
+                }
+              />
+
+              <ul className="mt-5 space-y-3">
+                {members.map((member: GroupMember) => (
+                  <li
+                    key={member.userId}
+                    className="rounded-row bg-surface-sunken p-4"
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="min-w-0 font-semibold text-ink">
+                        {member.name || (
+                          <span className="bidi-isolate">{member.email}</span>
+                        )}
                       </p>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">{member.email}</p>
+                      {member.userId === userId ? (
+                        <Badge tone="brand">{t('you')}</Badge>
+                      ) : null}
                     </div>
+                    {member.name ? (
+                      <p className="bidi-isolate mt-0.5 text-sm text-ink-faint">
+                        {member.email}
+                      </p>
+                    ) : null}
+
                     {member.monthState ? (
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <p className="text-xs text-gray-600 dark:text-gray-400">{t('totalMaaser')}</p>
-                          <p className="text-lg font-bold text-gray-900 dark:text-white">
-                            {formatCurrency(member.monthState.totalMaaser, locale)}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-gray-600 dark:text-gray-400">{t('fixedCharities')}</p>
-                          <p className="text-lg font-bold text-gray-900 dark:text-white">
-                            {formatCurrency(member.monthState.fixedCharitiesTotal, locale)}
-                          </p>
-                        </div>
+                      <div className="mt-4 grid grid-cols-2 gap-4">
+                        <Figure
+                          label={t('totalMaaser')}
+                          agorot={member.monthState.totalMaaser}
+                          locale={locale}
+                          size="sm"
+                        />
+                        <Figure
+                          label={t('fixedCharities')}
+                          agorot={member.monthState.fixedCharitiesTotal}
+                          locale={locale}
+                          size="sm"
+                          tone="muted"
+                        />
                       </div>
                     ) : (
-                      <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">No data for this month</p>
+                      <p className="mt-3 text-sm text-ink-faint">
+                        {t('noDataForMonth')}
+                      </p>
                     )}
-                  </div>
+                  </li>
                 ))}
-              </div>
+              </ul>
+            </Card>
+          )}
+        </>
+      ) : (
+        /* Nothing logged yet this month — invite the first income, and keep
+           paying ahead available. */
+        <EmptyState
+          icon={<PlusIcon />}
+          title={t('noIncomeThisMonth')}
+          description={t('addFirstIncome')}
+          action={
+            <div className="flex flex-wrap items-center justify-center gap-3">
+              <Link href="/income" className={buttonStyles({ size: 'md' })}>
+                {t('addIncome')}
+              </Link>
+              <GroupPaymentModal
+                month={selectedMonth}
+                totalUnpaid={0}
+                locale={locale}
+                label={hasPartner ? t('payGroupInAdvance') : t('payInAdvance')}
+                memberIds={memberIds}
+                translations={paymentModalTranslations}
+              />
             </div>
-            )}
-          </div>
-        ) : (
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-8 mb-6 border border-gray-200 dark:border-gray-700 text-center">
-            <p className="text-xl text-gray-700 dark:text-gray-300 mb-4">{t('nothingToPay')}</p>
-            <p className="text-gray-600 dark:text-gray-400 mb-6">{t('addFirstIncome')}</p>
-            <GroupPaymentModal
-              month={selectedMonth}
-              totalUnpaid={0}
-              locale={locale}
-              label={hasPartner ? t('payGroupInAdvance') : t('payInAdvance')}
-              memberIds={groupData.members.map((m: GroupMember) => m.userId)}
-              translations={getPaymentModalTranslations(hasPartner)}
-            />
-          </div>
-        )}
+          }
+        />
+      )}
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Page                                                                        */
+/* -------------------------------------------------------------------------- */
+
+export default async function DashboardPage({
+  params: routeParams,
+  searchParams,
+}: {
+  params: Promise<{ locale: string }>;
+  searchParams: Promise<{ month?: string }>;
+}) {
+  // Phase 1: Auth + translations in parallel
+  const [session, t, params, { locale: routeLocale }] = await Promise.all([
+    auth(),
+    getTranslations('dashboard'),
+    searchParams,
+    routeParams,
+  ]);
+
+  if (!session?.user?.id) {
+    // localePrefix is 'always', so an unprefixed /login is a 404.
+    redirect(`/${routeLocale}/login`);
+  }
+
+  const maxMonth = getCurrentMonth();
+  const monthParam = params.month;
+
+  // Validate month param: must be YYYY-MM format and not in the future
+  const isValidMonth =
+    monthParam && /^\d{4}-\d{2}$/.test(monthParam) && monthParam <= maxMonth;
+  const selectedMonth = isValidMonth ? monthParam : maxMonth;
+
+  return (
+    <div className="px-4 py-6 sm:px-6 md:py-8">
+      <div className="mx-auto w-full max-w-3xl space-y-6">
+        <PageHeader title={t('title')} description={t('subtitle')} />
+
+        {/* Keyed on the month so switching months shows the skeleton again
+            rather than freezing the previous month's figures. */}
+        <Suspense key={selectedMonth} fallback={<DashboardSkeleton />}>
+          <DashboardBody
+            userId={session.user.id}
+            sessionEmail={session.user.email || ''}
+            selectedMonth={selectedMonth}
+            maxMonth={maxMonth}
+          />
+        </Suspense>
       </div>
     </div>
   );

@@ -2,113 +2,78 @@ import { auth } from '@/lib/auth';
 import { redirect } from 'next/navigation';
 import { Link } from '@/i18n/routing';
 import { getTranslations } from 'next-intl/server';
-import { logout } from '@/app/actions/auth';
-import LanguageSwitcher from '@/components/LanguageSwitcher';
+import AccountMenu from '@/components/AccountMenu';
 import LocaleSync from '@/components/LocaleSync';
-import BottomNav from '@/components/BottomNav';
+import BottomNav, { HeaderNav } from '@/components/BottomNav';
 import RefreshButton from '@/components/RefreshButton';
 
+/**
+ * One shell for both widths.
+ *
+ * The header and the page content share a single container (max-w-5xl), so a
+ * heading lines up with the app name above it instead of drifting apart past
+ * 1024px. Destinations live in the nav — the same five in the bottom bar and
+ * in the header — and everything else (language, settings, logout) lives in
+ * the account menu, which is now reachable on a phone.
+ */
 export default async function DashboardLayout({
   children,
+  params,
 }: {
   children: React.ReactNode;
+  params: Promise<{ locale: string }>;
 }) {
-  const session = await auth();
+  const [session, { locale }] = await Promise.all([auth(), params]);
 
   if (!session?.user?.id) {
-    redirect('/login');
+    // localePrefix is 'always', so an unprefixed /login is a 404.
+    redirect(`/${locale}/login`);
   }
 
   const t = await getTranslations('common');
 
   return (
-    <div className="min-h-screen bg-gray-100 dark:bg-gray-900 pb-16 lg:pb-0">
+    <div className="flex min-h-screen flex-col bg-canvas pb-20 lg:pb-0">
       <LocaleSync />
-      {/* Navigation Header */}
-      <header className="bg-white dark:bg-gray-800 shadow-md border-b border-gray-200 dark:border-gray-700">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            {/* Logo/App Name */}
-            <Link href="/dashboard" className="flex items-center">
-              <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">{t('appName')}</h1>
-            </Link>
 
-            {/* Mobile: Refresh + Settings */}
-            <div className="flex items-center gap-1 lg:hidden">
-              <RefreshButton />
-              <Link
-                href="/settings"
-                className="p-2 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition"
+      <header className="safe-area-inset-top relative z-30 border-b border-line bg-surface">
+        <div className="mx-auto flex h-16 w-full max-w-5xl items-center gap-2 px-4 sm:px-6">
+          <Link
+            href="/dashboard"
+            className="flex shrink-0 items-center gap-2 rounded-control"
+          >
+            <span
+              aria-hidden="true"
+              className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-soft text-brand"
+            >
+              {/* A circle with a tenth of it filled — the maaser itself. */}
+              <svg
+                className="h-5 w-5"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={1.75}
               >
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                <circle cx="12" cy="12" r="9" />
+                <path d="M12 12V3a9 9 0 0 1 5.29 1.72Z" fill="currentColor" stroke="none" />
               </svg>
-              </Link>
-            </div>
+            </span>
+            <span className="font-display text-lg font-bold tracking-tight text-ink sm:text-xl">
+              {t('appName')}
+            </span>
+          </Link>
 
-            {/* Desktop Navigation Links - Hidden on mobile */}
-            <nav className="hidden lg:flex gap-2 xl:gap-4">
-              <Link
-                href="/dashboard"
-                className="px-3 xl:px-4 py-2 text-sm xl:text-base text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg font-medium transition"
-              >
-                {t('dashboard')}
-              </Link>
-              <Link
-                href="/income"
-                className="px-3 xl:px-4 py-2 text-sm xl:text-base text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg font-medium transition"
-              >
-                {t('income')}
-              </Link>
-              <Link
-                href="/charities"
-                className="px-3 xl:px-4 py-2 text-sm xl:text-base text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg font-medium transition"
-              >
-                {t('charities')}
-              </Link>
-              <Link
-                href="/history"
-                className="px-3 xl:px-4 py-2 text-sm xl:text-base text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg font-medium transition"
-              >
-                {t('history')}
-              </Link>
-              <Link
-                href="/partnership"
-                className="px-3 xl:px-4 py-2 text-sm xl:text-base text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg font-medium transition"
-              >
-                {t('partnership')}
-              </Link>
-              <Link
-                href="/settings"
-                className="px-3 xl:px-4 py-2 text-sm xl:text-base text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg font-medium transition"
-              >
-                {t('settings')}
-              </Link>
-            </nav>
+          <HeaderNav className="ms-4 hidden lg:flex" />
 
-            {/* Desktop User Menu - Hidden on mobile */}
-            <div className="hidden lg:flex items-center gap-2 xl:gap-4">
-              <RefreshButton />
-              <LanguageSwitcher />
-              <span className="hidden xl:inline text-sm text-gray-700 dark:text-gray-300 truncate max-w-[150px]">{session.user.email}</span>
-              <form action={logout}>
-                <button
-                  type="submit"
-                  className="px-3 xl:px-4 py-2 text-sm xl:text-base bg-gray-600 hover:bg-gray-700 dark:bg-gray-700 dark:hover:bg-gray-600 text-white rounded-lg font-medium transition"
-                >
-                  {t('logout')}
-                </button>
-              </form>
-            </div>
+          <div className="ms-auto flex shrink-0 items-center gap-1">
+            <RefreshButton />
+            <AccountMenu email={session.user.email} name={session.user.name} />
           </div>
         </div>
       </header>
 
-      {/* Page Content */}
-      <main>{children}</main>
+      <main className="mx-auto w-full max-w-5xl flex-1">{children}</main>
 
-      {/* Bottom Navigation - Mobile only */}
       <BottomNav />
     </div>
   );

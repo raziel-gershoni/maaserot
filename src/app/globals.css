@@ -167,6 +167,7 @@
 
   --critical: var(--color-rust-500);
   --critical-hover: var(--color-rust-600);
+  --critical-ink: #ffffff;
   --critical-soft: var(--color-rust-50);
   --critical-soft-ink: var(--color-rust-700);
 
@@ -215,6 +216,7 @@
 
     --critical: #d95a5a;
     --critical-hover: #e08d8d;
+    --critical-ink: #2a1010;
     --critical-soft: #341b1b;
     --critical-soft-ink: #ecb4b4;
 
@@ -259,6 +261,7 @@
 
   --color-critical: var(--critical);
   --color-critical-hover: var(--critical-hover);
+  --color-critical-ink: var(--critical-ink);
   --color-critical-soft: var(--critical-soft);
   --color-critical-soft-ink: var(--critical-soft-ink);
 

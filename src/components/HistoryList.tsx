@@ -2,8 +2,19 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { formatCurrency } from '@/lib/calculations';
+import { useTranslations } from 'next-intl';
 import ConfirmDialog from '@/components/ConfirmDialog';
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  Figure,
+  Money,
+  SectionRule,
+} from '@/components/ui';
+import { translateApiError } from '@/lib/errorCodes';
+import { cn } from '@/lib/utils';
 
 interface MemberState {
   userId: string;
@@ -35,46 +46,103 @@ interface MonthState {
   snapshots: GroupPaymentSnapshot[];
 }
 
+/** One income row, exactly as the user entered it. */
+export interface HistoryIncomeEntry {
+  id: string;
+  amount: number;
+  percentage: number;
+  maaser: number;
+  description: string | null;
+  /** ISO string — serialized on the server for the client boundary. */
+  createdAt: string;
+}
+
 interface HistoryListProps {
   monthStates: MonthState[];
+  /** The user's own income rows, keyed by month. */
+  incomesByMonth: Record<string, HistoryIncomeEntry[]>;
   memberNameMap: Record<string, string>;
   currentUserId: string;
   locale: string;
-  translations: {
-    paid: string;
-    remaining: string;
-    groupMembers: string;
-    you: string;
-    groupTotal: string;
-    totalMaaser: string;
-    totalPaid: string;
-    fixedCharities: string;
-    payments: string;
-    soloPayment: string;
-    groupPaymentWith: string;
-    noPaymentsYet: string;
-    deletePayment: string;
-    deletePaymentConfirm: string;
-    cancel: string;
-  };
   formattedMonths: Record<string, string>;
 }
 
+/**
+ * Wrap a run of latin text so the bidi algorithm cannot reorder it when it is
+ * interpolated into a Hebrew sentence. The programmatic twin of `bidi-isolate`,
+ * for the cases where the text goes into a message placeholder rather than into
+ * an element we control.
+ */
+function isolate(value: string) {
+  return `\u2068${value}\u2069`;
+}
+
+const CheckIcon = () => (
+  <svg
+    className="h-3.5 w-3.5"
+    viewBox="0 0 20 20"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2.25"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    <path d="M4 10.5l4 4 8-9" />
+  </svg>
+);
+
+const ClockIcon = () => (
+  <svg
+    className="h-3.5 w-3.5"
+    viewBox="0 0 20 20"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.75"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    <circle cx="10" cy="10" r="7.25" />
+    <path d="M10 6v4.25l2.5 1.75" />
+  </svg>
+);
+
 export default function HistoryList({
   monthStates,
+  incomesByMonth,
   memberNameMap,
   currentUserId,
   locale,
-  translations: t,
   formattedMonths,
 }: HistoryListProps) {
   const router = useRouter();
+  const t = useTranslations('history');
+  const tIncome = useTranslations('income');
+  const tDashboard = useTranslations('dashboard');
+  const tErrors = useTranslations('errors');
+
   const [expandedMonths, setExpandedMonths] = useState<Set<string>>(new Set());
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const intlLocale = locale === 'he' ? 'he-IL' : 'en-US';
+
+  const formatDay = (value: string | Date) =>
+    new Date(value).toLocaleDateString(intlLocale, {
+      day: 'numeric',
+      month: 'short',
+    });
+
+  const formatPercent = (percentage: number) =>
+    new Intl.NumberFormat(intlLocale, {
+      style: 'percent',
+      maximumFractionDigits: 2,
+    }).format(percentage / 100);
 
   const toggleMonth = (month: string) => {
-    setExpandedMonths(prev => {
+    setExpandedMonths((prev) => {
       const next = new Set(prev);
       if (next.has(month)) {
         next.delete(month);
@@ -87,11 +155,19 @@ export default function HistoryList({
 
   const deletePayment = async (snapshotId: string) => {
     setDeletingId(snapshotId);
+    setDeleteError(null);
     try {
-      const res = await fetch(`/api/payment/unified?id=${snapshotId}`, { method: 'DELETE' });
+      const res = await fetch(`/api/payment/unified?id=${snapshotId}`, {
+        method: 'DELETE',
+      });
       if (res.ok) {
         router.refresh();
+      } else {
+        const data = await res.json().catch(() => null);
+        setDeleteError(translateApiError(tErrors, data?.error));
       }
+    } catch {
+      setDeleteError(translateApiError(tErrors, null));
     } finally {
       setDeletingId(null);
       setConfirmDeleteId(null);
@@ -100,7 +176,7 @@ export default function HistoryList({
 
   // Check if month has any group payments (more than 1 member)
   const hasGroupPayments = (monthState: MonthState) => {
-    return monthState.snapshots.some(s => s.members.length > 1);
+    return monthState.snapshots.some((s) => s.members.length > 1);
   };
 
   // Get unique partner names for a month (from all group snapshots)
@@ -115,289 +191,444 @@ export default function HistoryList({
         }
       }
     }
-    return Array.from(partnerIds).map(id => memberNameMap[id] || 'Unknown');
+    return Array.from(partnerIds).map((id) => memberNameMap[id] || 'Unknown');
   };
 
   // Get member summary for expanded view (from first group snapshot)
   const getMemberSummary = (monthState: MonthState) => {
     // Find the first group snapshot to get member composition
-    const groupSnapshot = monthState.snapshots.find(s => s.members.length > 1);
+    const groupSnapshot = monthState.snapshots.find(
+      (s) => s.members.length > 1
+    );
     if (!groupSnapshot) return null;
 
     const memberStates = groupSnapshot.memberStates as MemberState[];
-    return memberStates.map(ms => ({
+    return memberStates.map((ms) => ({
       ...ms,
-      name: ms.userId === currentUserId ? t.you : (memberNameMap[ms.userId] || 'Unknown'),
+      name:
+        ms.userId === currentUserId
+          ? t('you')
+          : memberNameMap[ms.userId] || 'Unknown',
       isCurrentUser: ms.userId === currentUserId,
     }));
   };
 
   return (
     <div className="space-y-3">
-      {monthStates.map((monthState) => {
-        const isExpanded = expandedMonths.has(monthState.month);
-        const hasGroup = hasGroupPayments(monthState);
-        const partnerNames = getPartnerNames(monthState);
-        const memberSummary = getMemberSummary(monthState);
+      {deleteError ? (
+        <Alert tone="error" title={t('deletePayment')}>
+          {deleteError}
+        </Alert>
+      ) : null}
 
-        return (
-          <div
-            key={monthState.month}
-            className="border-2 border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden bg-gray-50 dark:bg-gray-900 transition-all"
-          >
-            {/* Collapsed Header - Always Visible */}
-            <button
-              onClick={() => toggleMonth(monthState.month)}
-              className="w-full px-6 py-4 flex items-center justify-between hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-left"
+      <ul className="space-y-3">
+        {monthStates.map((monthState) => {
+          const isExpanded = expandedMonths.has(monthState.month);
+          const hasGroup = hasGroupPayments(monthState);
+          const partnerNames = getPartnerNames(monthState);
+          const memberSummary = getMemberSummary(monthState);
+          const isPaid = monthState.unpaid === 0 && monthState.hasPayments;
+          const panelId = `history-month-${monthState.month}`;
+
+          const monthIncomes = incomesByMonth[monthState.month] ?? [];
+          const ownGross = monthIncomes.reduce((sum, i) => sum + i.amount, 0);
+          const ownMaaser = monthIncomes.reduce((sum, i) => sum + i.maaser, 0);
+
+          return (
+            <Card
+              as="li"
+              padded={false}
+              key={monthState.month}
+              className="overflow-hidden"
             >
-              <div className="flex items-center gap-3">
-                {/* Chevron */}
-                <svg
-                  className={`w-5 h-5 text-gray-500 dark:text-gray-400 transition-transform duration-200 ${
-                    isExpanded ? 'rotate-90' : ''
-                  }`}
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
+              {/* Collapsed header — always visible */}
+              <h3>
+                <button
+                  type="button"
+                  onClick={() => toggleMonth(monthState.month)}
+                  aria-expanded={isExpanded}
+                  aria-controls={panelId}
+                  className="w-full px-4 py-4 text-start font-sans transition-colors hover:bg-surface-sunken focus-visible:-outline-offset-2 sm:px-5"
                 >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M9 5l7 7-7 7"
-                  />
-                </svg>
+                  <span className="flex items-start gap-3">
+                    <svg
+                      className={cn(
+                        'mt-1 h-5 w-5 shrink-0 text-ink-faint transition-transform duration-200',
+                        isExpanded ? 'rotate-90' : 'rtl:rotate-180'
+                      )}
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden="true"
+                    >
+                      <path d="M9 5l7 7-7 7" />
+                    </svg>
 
-                <div>
-                  <h3 className="text-xl font-bold text-gray-900 dark:text-white">
-                    {formattedMonths[monthState.month] || monthState.month}
-                  </h3>
-                  {hasGroup && partnerNames.length > 0 && (
-                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-                      {t.groupPaymentWith.replace('{names}', partnerNames.join(', '))}
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex items-center gap-4">
-                {/* Total Paid */}
-                <div className="text-right">
-                  <p className="text-xs text-gray-500 dark:text-gray-400">{t.totalPaid}</p>
-                  <p className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                    {formatCurrency(monthState.totalPaid, locale)}
-                  </p>
-                </div>
-
-                {/* Remaining / Status */}
-                {(() => {
-                  const isPaid = monthState.unpaid === 0 && monthState.hasPayments;
-                  return (
-                    <>
-                      <div className="text-right">
-                        <p className="text-xs text-gray-500 dark:text-gray-400">{t.remaining}</p>
-                        <p
-                          className={`text-lg font-semibold ${
-                            isPaid
-                              ? 'text-green-600 dark:text-green-400'
-                              : 'text-amber-600 dark:text-amber-400'
-                          }`}
+                    <span className="min-w-0 flex-1">
+                      <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <span className="font-display text-base font-semibold text-ink sm:text-lg">
+                          {formattedMonths[monthState.month] ||
+                            monthState.month}
+                        </span>
+                        <Badge
+                          tone={isPaid ? 'success' : 'warning'}
+                          icon={isPaid ? <CheckIcon /> : <ClockIcon />}
                         >
-                          {isPaid
-                            ? `✓ ${t.paid}`
-                            : formatCurrency(monthState.unpaid, locale)}
-                        </p>
-                      </div>
-
-                      <span
-                        className={`px-2.5 py-1 rounded-full text-xs font-bold ${
-                          isPaid
-                            ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200'
-                            : 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-200'
-                        }`}
-                      >
-                        {isPaid ? '✓' : '⏳'}
+                          {isPaid ? t('paid') : t('unpaid')}
+                        </Badge>
                       </span>
-                    </>
-                  );
-                })()}
-              </div>
-            </button>
 
-            {/* Expanded Content */}
-            {isExpanded && (
-              <div className="px-6 pb-6 border-t border-gray-200 dark:border-gray-700">
-                {/* Group Members Section - Only show if there are group payments */}
-                {hasGroup && memberSummary && (
-                  <div className="mt-4">
-                    <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
-                      {t.groupMembers}
-                    </h4>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {memberSummary.map((member) => (
-                        <div
-                          key={member.userId}
-                          className={`rounded-lg p-4 border ${
-                            member.isCurrentUser
-                              ? 'bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200 dark:border-indigo-700'
-                              : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600'
-                          }`}
-                        >
-                          <p className={`font-semibold mb-2 ${
-                            member.isCurrentUser
-                              ? 'text-indigo-700 dark:text-indigo-300'
-                              : 'text-gray-900 dark:text-white'
-                          }`}>
-                            {member.name}
-                          </p>
-                          <div className="space-y-1 text-sm">
-                            <div className="flex justify-between">
-                              <span className="text-gray-500 dark:text-gray-400">{t.totalMaaser}:</span>
-                              <span className="font-medium text-gray-900 dark:text-gray-100">
-                                {formatCurrency(member.totalMaaser, locale)}
-                              </span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-gray-500 dark:text-gray-400">{t.fixedCharities}:</span>
-                              <span className="font-medium text-gray-900 dark:text-gray-100">
-                                {formatCurrency(member.fixedCharitiesTotal, locale)}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-
-                    {/* Group Total */}
-                    <div className="mt-4 py-3 px-4 bg-gray-100 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-600">
-                      <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-sm">
-                        <span className="text-gray-700 dark:text-gray-300 font-medium">
-                          {t.groupTotal}:
+                      {hasGroup && partnerNames.length > 0 ? (
+                        <span className="mt-1 block text-sm text-ink-muted">
+                          {t('groupPaymentWith', {
+                            names: isolate(partnerNames.join(', ')),
+                          })}
                         </span>
-                        <span className="text-gray-900 dark:text-gray-100">
-                          {formatCurrency(memberSummary.reduce((sum, m) => sum + m.totalMaaser, 0), locale)} {t.totalMaaser.toLowerCase()}
-                        </span>
-                        <span className="text-gray-400">·</span>
-                        <span className="text-gray-900 dark:text-gray-100">
-                          {formatCurrency(memberSummary.reduce((sum, m) => sum + m.fixedCharitiesTotal, 0), locale)} {t.fixedCharities.toLowerCase()}
-                        </span>
-                        <span className="text-gray-400">·</span>
-                        <span className="font-semibold text-amber-600 dark:text-amber-400">
-                          {formatCurrency(monthState.unpaid, locale)} {t.remaining}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                )}
+                      ) : null}
 
-                {/* Solo Month Summary - Show summary cards when no group payments */}
-                {!hasGroup && (
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
-                    <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
-                      <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">{t.totalMaaser}</p>
-                      <p className="text-xl font-bold text-gray-900 dark:text-gray-100">
-                        {formatCurrency(monthState.totalMaaser, locale)}
-                      </p>
-                    </div>
-                    <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
-                      <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">{t.fixedCharities}</p>
-                      <p className="text-xl font-bold text-gray-900 dark:text-gray-100">
-                        {formatCurrency(monthState.fixedCharitiesTotal, locale)}
-                      </p>
-                    </div>
-                    <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
-                      <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">{t.remaining}</p>
-                      <p className={`text-xl font-bold ${
-                        monthState.unpaid === 0 && monthState.hasPayments
-                          ? 'text-green-600 dark:text-green-400'
-                          : 'text-amber-600 dark:text-amber-400'
-                      }`}>
-                        {formatCurrency(monthState.unpaid, locale)}
-                      </p>
-                    </div>
-                  </div>
-                )}
+                      <span className="mt-3 flex flex-wrap gap-x-6 gap-y-3">
+                        <Figure
+                          label={t('totalPaid')}
+                          agorot={monthState.totalPaid}
+                          locale={locale}
+                          size="sm"
+                        />
+                        <Figure
+                          label={t('remaining')}
+                          agorot={monthState.unpaid}
+                          locale={locale}
+                          size="sm"
+                          tone="inherit"
+                          className={isPaid ? 'text-positive' : 'text-caution'}
+                        />
+                      </span>
+                    </span>
+                  </span>
+                </button>
+              </h3>
 
-                {/* Payments List */}
-                <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-                  <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
-                    {t.payments}
-                  </h4>
-                  {monthState.snapshots.length > 0 ? (
-                    <div className="space-y-2">
-                      {monthState.snapshots.map((snapshot) => {
-                        const isSolo = snapshot.members.length === 1;
-                        const otherMembers = snapshot.members
-                          .filter(m => m.userId !== currentUserId)
-                          .map(m => memberNameMap[m.userId] || 'Unknown');
+              {/* Expanded content */}
+              {isExpanded ? (
+                <div
+                  id={panelId}
+                  className="space-y-6 border-t border-line px-4 pt-4 pb-5 sm:px-5"
+                >
+                  {/* Group members — only when the month has group payments */}
+                  {hasGroup && memberSummary ? (
+                    <section>
+                      <SectionRule>{t('groupMembers')}</SectionRule>
 
-                        return (
-                          <div
-                            key={snapshot.id}
-                            className="flex items-center justify-between bg-white dark:bg-gray-800 rounded-lg px-4 py-2 border border-gray-200 dark:border-gray-600"
+                      <ul className="mt-3 grid gap-2 sm:grid-cols-2">
+                        {memberSummary.map((member) => (
+                          <li
+                            key={member.userId}
+                            className={cn(
+                              'rounded-row border p-3',
+                              member.isCurrentUser
+                                ? 'border-accent/25 bg-accent-soft'
+                                : 'border-line bg-surface'
+                            )}
                           >
-                            <div className="flex items-center gap-3">
-                              <span className="text-base font-semibold text-gray-900 dark:text-gray-100">
-                                {formatCurrency(snapshot.groupAmountPaid, locale)}
-                              </span>
-                              <span className={`text-xs px-2 py-0.5 rounded-full ${
-                                isSolo
-                                  ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
-                                  : 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300'
-                              }`}>
-                                {isSolo
-                                  ? t.soloPayment
-                                  : t.groupPaymentWith.replace('{names}', otherMembers.join(', '))}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm text-gray-500 dark:text-gray-400">
-                                {new Date(snapshot.paidAt).toLocaleDateString(locale, {
-                                  day: 'numeric',
-                                  month: 'short'
-                                })}
-                              </span>
-                              <button
-                                onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(snapshot.id); }}
-                                disabled={deletingId === snapshot.id}
-                                className="p-1 text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors disabled:opacity-50"
-                                title={t.deletePayment}
-                              >
-                                {deletingId === snapshot.id ? (
-                                  <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                            <p
+                              className={cn(
+                                'bidi-isolate font-semibold break-words',
+                                member.isCurrentUser
+                                  ? 'text-accent-soft-ink'
+                                  : 'text-ink'
+                              )}
+                            >
+                              {member.name}
+                            </p>
+                            <dl className="mt-2 space-y-1 text-sm">
+                              <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+                                <dt className="text-ink-muted">
+                                  {t('totalMaaser')}
+                                </dt>
+                                <dd>
+                                  <Money
+                                    agorot={member.totalMaaser}
+                                    locale={locale}
+                                    className="text-sm"
+                                  />
+                                </dd>
+                              </div>
+                              <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+                                <dt className="text-ink-muted">
+                                  {t('fixedCharities')}
+                                </dt>
+                                <dd>
+                                  <Money
+                                    agorot={member.fixedCharitiesTotal}
+                                    locale={locale}
+                                    className="text-sm"
+                                  />
+                                </dd>
+                              </div>
+                            </dl>
+                          </li>
+                        ))}
+                      </ul>
+
+                      <div className="mt-3 rounded-row bg-surface-sunken p-3">
+                        <p className="text-sm font-semibold text-ink">
+                          {t('groupTotal')}
+                        </p>
+                        <div className="mt-2 flex flex-wrap gap-x-6 gap-y-3">
+                          <Figure
+                            label={t('totalMaaser')}
+                            agorot={memberSummary.reduce(
+                              (sum, m) => sum + m.totalMaaser,
+                              0
+                            )}
+                            locale={locale}
+                            size="sm"
+                            tone="muted"
+                          />
+                          <Figure
+                            label={t('fixedCharities')}
+                            agorot={memberSummary.reduce(
+                              (sum, m) => sum + m.fixedCharitiesTotal,
+                              0
+                            )}
+                            locale={locale}
+                            size="sm"
+                            tone="muted"
+                          />
+                          <Figure
+                            label={t('remaining')}
+                            agorot={monthState.unpaid}
+                            locale={locale}
+                            size="sm"
+                            tone="inherit"
+                            className={
+                              isPaid ? 'text-positive' : 'text-caution'
+                            }
+                          />
+                        </div>
+                      </div>
+                    </section>
+                  ) : null}
+
+                  {/* Solo month summary */}
+                  {!hasGroup ? (
+                    <section>
+                      <SectionRule>{t('monthSummary')}</SectionRule>
+                      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                        <div className="rounded-row bg-surface-sunken p-3">
+                          <Figure
+                            label={t('totalMaaser')}
+                            agorot={monthState.totalMaaser}
+                            locale={locale}
+                            size="sm"
+                          />
+                        </div>
+                        <div className="rounded-row bg-surface-sunken p-3">
+                          <Figure
+                            label={t('fixedCharities')}
+                            agorot={monthState.fixedCharitiesTotal}
+                            locale={locale}
+                            size="sm"
+                            tone="muted"
+                          />
+                        </div>
+                        <div className="col-span-2 rounded-row bg-surface-sunken p-3 sm:col-span-1">
+                          <Figure
+                            label={t('remaining')}
+                            agorot={monthState.unpaid}
+                            locale={locale}
+                            size="sm"
+                            tone="inherit"
+                            className={
+                              isPaid ? 'text-positive' : 'text-caution'
+                            }
+                          />
+                        </div>
+                      </div>
+                    </section>
+                  ) : null}
+
+                  {/* Income line items — what produced the maaser above */}
+                  <section>
+                    <SectionRule>
+                      {t('incomeCount', { count: monthIncomes.length })}
+                    </SectionRule>
+
+                    {monthIncomes.length > 0 ? (
+                      <>
+                        <ul className="mt-3 space-y-2">
+                          {monthIncomes.map((entry) => (
+                            <li
+                              key={entry.id}
+                              className="rounded-row border border-line bg-surface px-3 py-2.5"
+                            >
+                              <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                                <p className="bidi-isolate min-w-0 text-sm font-medium break-words text-ink">
+                                  {entry.description || tIncome('income')}
+                                </p>
+                                <Money
+                                  agorot={entry.amount}
+                                  locale={locale}
+                                  size="sm"
+                                />
+                              </div>
+                              <div className="mt-1 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 text-xs text-ink-faint">
+                                <span className="flex items-baseline gap-1.5">
+                                  <time
+                                    dateTime={entry.createdAt}
+                                    suppressHydrationWarning
+                                  >
+                                    {formatDay(entry.createdAt)}
+                                  </time>
+                                  <span aria-hidden="true">·</span>
+                                  <bdi className="tabular">
+                                    {formatPercent(entry.percentage)}
+                                  </bdi>
+                                </span>
+                                <span className="flex items-baseline gap-1.5">
+                                  <span className="text-eyebrow uppercase">
+                                    {tIncome('maaser')}
+                                  </span>
+                                  <Money
+                                    agorot={entry.maaser}
+                                    locale={locale}
+                                    tone="brand"
+                                    className="text-xs"
+                                  />
+                                </span>
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+
+                        <div className="mt-3 flex flex-wrap gap-x-6 gap-y-3 rounded-row bg-surface-sunken p-3">
+                          <Figure
+                            label={t('yourIncomeTotal')}
+                            agorot={ownGross}
+                            locale={locale}
+                            size="sm"
+                            tone="muted"
+                          />
+                          <Figure
+                            label={t('yourMaaserTotal')}
+                            agorot={ownMaaser}
+                            locale={locale}
+                            size="sm"
+                          />
+                        </div>
+
+                        {hasGroup ? (
+                          <p className="mt-2 text-xs text-ink-faint">
+                            {t('ownRowsOnly')}
+                          </p>
+                        ) : null}
+                      </>
+                    ) : (
+                      <p className="mt-3 rounded-row border border-dashed border-line-strong px-3 py-4 text-center text-sm text-ink-muted">
+                        {tDashboard('noIncomeThisMonth')}
+                      </p>
+                    )}
+                  </section>
+
+                  {/* Payments */}
+                  <section>
+                    <SectionRule>{t('payments')}</SectionRule>
+
+                    {monthState.snapshots.length > 0 ? (
+                      <ul className="mt-3 space-y-2">
+                        {monthState.snapshots.map((snapshot) => {
+                          const isSolo = snapshot.members.length === 1;
+                          const otherMembers = snapshot.members
+                            .filter((m) => m.userId !== currentUserId)
+                            .map((m) => memberNameMap[m.userId] || 'Unknown');
+
+                          return (
+                            <li
+                              key={snapshot.id}
+                              className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 rounded-row border border-line bg-surface px-3 py-2"
+                            >
+                              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                                <Money
+                                  agorot={snapshot.groupAmountPaid}
+                                  locale={locale}
+                                  size="sm"
+                                />
+                                <Badge tone={isSolo ? 'neutral' : 'accent'}>
+                                  {isSolo
+                                    ? t('soloPayment')
+                                    : t('groupPaymentWith', {
+                                        names: isolate(
+                                          otherMembers.join(', ')
+                                        ),
+                                      })}
+                                </Badge>
+                              </div>
+
+                              <div className="flex items-center gap-1">
+                                <time
+                                  className="text-xs text-ink-faint"
+                                  dateTime={new Date(
+                                    snapshot.paidAt
+                                  ).toISOString()}
+                                  suppressHydrationWarning
+                                >
+                                  {formatDay(snapshot.paidAt)}
+                                </time>
+                                <Button
+                                  variant="ghost"
+                                  size="md"
+                                  icon
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setDeleteError(null);
+                                    setConfirmDeleteId(snapshot.id);
+                                  }}
+                                  pending={deletingId === snapshot.id}
+                                  aria-label={t('deletePayment')}
+                                  title={t('deletePayment')}
+                                  className="text-ink-faint hover:text-critical"
+                                >
+                                  <svg
+                                    className="h-5 w-5"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="1.75"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    aria-hidden="true"
+                                  >
+                                    <path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                                   </svg>
-                                ) : (
-                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                  </svg>
-                                )}
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-gray-500 dark:text-gray-400 italic">
-                      {t.noPaymentsYet}
-                    </p>
-                  )}
+                                </Button>
+                              </div>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    ) : (
+                      <p className="mt-3 rounded-row border border-dashed border-line-strong px-3 py-4 text-center text-sm text-ink-muted">
+                        {t('noPaymentsYet')}
+                      </p>
+                    )}
+                  </section>
                 </div>
-              </div>
-            )}
-          </div>
-        );
-      })}
+              ) : null}
+            </Card>
+          );
+        })}
+      </ul>
+
       <ConfirmDialog
         isOpen={confirmDeleteId !== null}
         onConfirm={() => confirmDeleteId && deletePayment(confirmDeleteId)}
         onCancel={() => setConfirmDeleteId(null)}
-        title={t.deletePayment}
-        message={t.deletePaymentConfirm}
-        confirmLabel={t.deletePayment}
-        cancelLabel={t.cancel}
+        title={t('deletePayment')}
+        message={t('deletePaymentConfirm')}
+        confirmLabel={t('deletePayment')}
+        cancelLabel={t('cancel')}
         isLoading={deletingId !== null}
       />
     </div>

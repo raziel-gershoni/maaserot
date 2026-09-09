@@ -24,7 +24,7 @@ const VARIANTS: Record<ButtonVariant, string> = {
   // the clay brand to be read as a warning.
   danger:
     'text-critical border border-critical/40 hover:bg-critical-soft hover:border-critical',
-  dangerSolid: 'bg-critical text-white hover:bg-critical-hover shadow-card',
+  dangerSolid: 'bg-critical text-critical-ink hover:bg-critical-hover shadow-card',
 };
 
 const SIZES: Record<ButtonSize, string> = {

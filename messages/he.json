@@ -16,7 +16,14 @@
     "history": "היסטוריה",
     "shared": "שיתוף",
     "partnership": "שותפות",
-    "settings": "הגדרות"
+    "settings": "הגדרות",
+    "retry": "נסה שוב",
+    "navDashboard": "בית",
+    "navCharities": "תרומות",
+    "mainNav": "ניווט ראשי",
+    "account": "חשבון",
+    "refresh": "רענן",
+    "processing": "מעבד..."
   },
   "auth": {
     "login": "התחברות",
@@ -32,7 +39,37 @@
     "noAccount": "אין לך חשבון?",
     "invalidCredentials": "אימייל או סיסמה שגויים",
     "orLoginWith": "או",
-    "loginWithTelegram": "התחבר עם טלגרם"
+    "loginWithTelegram": "התחבר עם טלגרם",
+    "loginSubtitle": "התחבר כדי להמשיך לעקוב אחרי המעשרות שלך",
+    "registerSubtitle": "פתח חשבון והתחל לעקוב אחרי המעשרות שלך",
+    "verifyEmailCta": "אמת את האימייל שלך",
+    "passwordHint": "לפחות 8 תווים",
+    "passwordTooShort": "הסיסמה חייבת להכיל לפחות 8 תווים",
+    "checkYourEmail": "בדוק את האימייל שלך",
+    "verificationSentTo": "שלחנו קישור אימות לכתובת:",
+    "verificationInstructions": "לחץ על הקישור באימייל כדי לאמת את החשבון ולהתחיל להשתמש במערכת.",
+    "didntGetEmail": "לא קיבלת את האימייל?",
+    "resend": "שלח שוב",
+    "resending": "שולח...",
+    "resendIn": "אפשר לשלוח שוב בעוד {seconds} שניות",
+    "resendSuccess": "שלחנו קישור אימות חדש. בדוק את תיבת הדואר.",
+    "emailRequired": "הזן כתובת אימייל",
+    "alreadyVerified": "האימייל הזה כבר אומת. אפשר להתחבר.",
+    "tips": "טיפים",
+    "tipSpam": "בדוק את תיקיית הספאם או הזבל",
+    "tipLinkExpiry": "הקישור תקף ל-24 שעות",
+    "tipCheckAddress": "ודא שכתובת האימייל נכונה",
+    "backToLogin": "חזרה להתחברות",
+    "verifying": "מאמת את האימייל שלך...",
+    "verifyingHint": "רק רגע",
+    "verifiedTitle": "האימייל אומת",
+    "verifiedBody": "האימייל שלך אומת בהצלחה. עכשיו אפשר להתחבר ולהתחיל להשתמש במערכת.",
+    "verifyFailedTitle": "האימות נכשל",
+    "verifyFailedBody": "ייתכן שהקישור אינו תקף או שפג תוקפו. שלח קישור חדש ונסה שוב.",
+    "resendVerification": "שלח קישור אימות חדש",
+    "telegramConnecting": "מתחבר דרך טלגרם...",
+    "telegramFailedTitle": "ההתחברות דרך טלגרם נכשלה",
+    "telegramFailedBody": "לא הצלחנו לאמת את החשבון שלך מול טלגרם. נסה שוב."
   },
   "dashboard": {
     "title": "לוח בקרה",
@@ -76,7 +113,14 @@
     "nextMonth": "חודש הבא",
     "remindPartner": "תזכורת להוספת הכנסות",
     "reminderSent": "התזכורת נשלחה!",
-    "reminderFailed": "השליחה נכשלה"
+    "reminderFailed": "השליחה נכשלה",
+    "you": "אתה",
+    "noDataForMonth": "אין נתונים לחודש זה",
+    "decreaseAmount": "הפחת סכום",
+    "increaseAmount": "הגדל סכום",
+    "editAmount": "ערוך סכום",
+    "fullRemaining": "כל היתרה",
+    "remainingAfter": "ייוותר לתרום"
   },
   "income": {
     "title": "הכנסות",
@@ -104,7 +148,12 @@
     "save": "שמור",
     "cancel": "ביטול",
     "frozen": "קפוא",
-    "deleteConfirm": "האם אתה בטוח שברצונך למחוק הכנסה זו?"
+    "deleteConfirm": "האם אתה בטוח שברצונך למחוק הכנסה זו?",
+    "entries": "רישומי הכנסה",
+    "loadFailed": "טעינת ההכנסות נכשלה",
+    "noIncomeInMonth": "לא נרשמו הכנסות בחודש זה",
+    "viewingPastMonth": "צפייה בחודש קודם",
+    "viewingPastMonthHelp": "ניתן לרשום הכנסה רק בחודש הנוכחי. חודש זה פתוח לצפייה בלבד."
   },
   "charities": {
     "title": "תרומות קבועות",
@@ -132,7 +181,9 @@
     "editCharity": "ערוך תרומה קבועה",
     "save": "שמור",
     "saving": "שומר...",
-    "cancel": "ביטול"
+    "cancel": "ביטול",
+    "activeCount": "{count, plural, =0 {אין תרומות פעילות} one {תרומה פעילה אחת} two {שתי תרומות פעילות} other {# תרומות פעילות}}",
+    "amountPlaceholder": "100.00"
   },
   "history": {
     "title": "היסטוריה",
@@ -158,7 +209,12 @@
     "remaining": "נותר",
     "deletePayment": "מחק תשלום",
     "deletePaymentConfirm": "האם אתה בטוח שברצונך למחוק תשלום זה?",
-    "cancel": "ביטול"
+    "cancel": "ביטול",
+    "incomeCount": "הכנסות ({count})",
+    "monthSummary": "סיכום החודש",
+    "yourIncomeTotal": "סה\"כ ההכנסות שלך",
+    "yourMaaserTotal": "סה\"כ המעשר שלך",
+    "ownRowsOnly": "הסכומים כאן כוללים רק את ההכנסות שלך"
   },
   "settings": {
     "title": "הגדרות",
@@ -182,13 +238,21 @@
     "newPassword": "סיסמה חדשה",
     "confirmPassword": "אשר סיסמה",
     "passwordMismatch": "הסיסמאות אינן תואמות",
-    "passwordTooShort": "הסיסמה חייבת להכיל לפחות 6 תווים",
+    "passwordTooShort": "הסיסמה חייבת להכיל לפחות 8 תווים",
     "changing": "משנה...",
     "changed": "שונה!",
     "passwordChangeSuccess": "הסיסמה שונתה בהצלחה!",
     "passwordChangeFailed": "שינוי הסיסמה נכשל",
     "accountActions": "פעולות חשבון",
-    "logout": "התנתק"
+    "logout": "התנתק",
+    "preferences": "העדפות",
+    "percentRange": "בחר אחוז בין 1 ל-100",
+    "passwordMinLength": "לפחות {count} תווים",
+    "sessionDescription": "התנתקות מהחשבון במכשיר הזה.",
+    "logoutConfirmTitle": "להתנתק מהחשבון?",
+    "logoutConfirmDescription": "תצטרך להתחבר שוב כדי לראות את נתוני המעשר שלך.",
+    "loggingOut": "מתנתק...",
+    "loadFailed": "טעינת ההגדרות נכשלה"
   },
   "shared": {
     "title": "שיתוף",
@@ -251,10 +315,30 @@
     "sent": "נשלח!",
     "waitingForResponse": "ממתין לתגובה",
     "note": "הערה",
-    "partnershipNote": "שותפות מאפשרת לך ולאדם נוסף לשלב את התקציבים שלכם ולבצע תשלומי מעשר משותפים. שני השותפים יראו את אותו לוח בקרה קבוצתי."
+    "partnershipNote": "שותפות מאפשרת לך ולאדם נוסף לשלב את התקציבים שלכם ולבצע תשלומי מעשר משותפים. שני השותפים יראו את אותו לוח בקרה קבוצתי.",
+    "retry": "נסה שוב"
   },
   "errors": {
-    "cannotEditFrozenIncome": "לא ניתן לערוך הכנסה שנקלטה לפני שהחודש סומן כשולם",
-    "cannotDeleteFrozenIncome": "לא ניתן למחוק הכנסה שנקלטה לפני שהחודש סומן כשולם"
+    "ACCOUNT_LOCKED": "החשבון נעול אחרי יותר מדי ניסיונות התחברות. נסה שוב מאוחר יותר",
+    "ALREADY_HAS_PARTNERSHIP": "כבר קיימת שותפות פעילה",
+    "CANNOT_DELETE_FROZEN_INCOME": "לא ניתן למחוק הכנסה מחודש שכבר שולם",
+    "CANNOT_EDIT_FROZEN_INCOME": "לא ניתן לערוך הכנסה מחודש שכבר שולם",
+    "CANNOT_INVITE_SELF": "אי אפשר להזמין את עצמך",
+    "CHARITY_NOT_FOUND": "התרומה הקבועה לא נמצאה",
+    "EMAIL_NOT_VERIFIED": "צריך לאמת את כתובת האימייל לפני ההתחברות",
+    "EMAIL_TAKEN": "כתובת האימייל הזו כבר רשומה",
+    "INCOME_NOT_FOUND": "ההכנסה לא נמצאה",
+    "INVALID_CREDENTIALS": "אימייל או סיסמה שגויים",
+    "INVALID_PASSWORD": "הסיסמה הנוכחית שגויה",
+    "NOTHING_TO_PAY": "אין סכום לתשלום החודש",
+    "PARTNERSHIP_NOT_FOUND": "השותפות לא נמצאה",
+    "RATE_LIMITED": "יותר מדי ניסיונות. נסה שוב בעוד כמה דקות",
+    "SERVER_ERROR": "משהו השתבש. נסה שוב בעוד רגע",
+    "TOKEN_EXPIRED": "פג תוקף הקישור. בקש קישור חדש",
+    "TOKEN_INVALID": "הקישור אינו תקף",
+    "UNAUTHORIZED": "צריך להתחבר כדי להמשיך",
+    "USER_NOT_FOUND": "לא נמצא משתמש עם הכתובת הזו",
+    "VALIDATION_FAILED": "חלק מהפרטים אינם תקינים. בדוק אותם ונסה שוב",
+    "WEAK_PASSWORD": "הסיסמה חייבת להכיל לפחות 8 תווים"
   }
 }

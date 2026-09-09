@@ -3,6 +3,23 @@
 import { useState, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
 import { signOut } from 'next-auth/react';
+import {
+  Alert,
+  Button,
+  Card,
+  CardHeader,
+  Dialog,
+  Field,
+  PageHeader,
+  SectionRule,
+  SelectField,
+  Skeleton,
+  SkeletonRows,
+} from '@/components/ui';
+import { translateApiError } from '@/lib/errorCodes';
+
+/** The single source of truth for the password rule on this screen. */
+const MIN_PASSWORD_LENGTH = 8;
 
 interface UserSettings {
   name: string;
@@ -10,6 +27,8 @@ interface UserSettings {
   defaultPercent: number;
   locale: string;
 }
+
+type PasswordIssue = 'mismatch' | 'tooShort' | null;
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState<UserSettings>({
@@ -20,6 +39,7 @@ export default function SettingsPage() {
   });
   const [originalSettings, setOriginalSettings] = useState<UserSettings | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
@@ -32,24 +52,43 @@ export default function SettingsPage() {
   const [passwordLoading, setPasswordLoading] = useState(false);
   const [passwordSuccess, setPasswordSuccess] = useState(false);
   const [passwordError, setPasswordError] = useState('');
+  const [passwordIssue, setPasswordIssue] = useState<PasswordIssue>(null);
+
+  const [logoutOpen, setLogoutOpen] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [logoutError, setLogoutError] = useState('');
 
   const t = useTranslations('settings');
   const tCommon = useTranslations('common');
+  const tErrors = useTranslations('errors');
 
   useEffect(() => {
     fetchSettings();
+  // Mount-only fetch. The fetcher closes over next-intl's `t`, which is not
+  // guaranteed to be referentially stable, so listing it here would re-run the
+  // request on every render.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const fetchSettings = async () => {
+    setIsLoading(true);
+    setLoadError('');
+
     try {
       const response = await fetch('/api/settings');
-      if (response.ok) {
-        const data = await response.json();
-        setSettings(data.settings);
-        setOriginalSettings(data.settings);
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        setLoadError(translateApiError(tErrors, data.error));
+        return;
       }
+
+      const data = await response.json();
+      setSettings(data.settings);
+      setOriginalSettings(data.settings);
     } catch (error) {
       console.error('Failed to fetch settings:', error);
+      setLoadError(translateApiError(tErrors, null));
     } finally {
       setIsLoading(false);
     }
@@ -69,8 +108,8 @@ export default function SettingsPage() {
       });
 
       if (!response.ok) {
-        const data = await response.json();
-        setError(data.error || t('saveFailed'));
+        const data = await response.json().catch(() => ({}));
+        setError(translateApiError(tErrors, data.error));
         setIsSaving(false);
         return;
       }
@@ -96,15 +135,16 @@ export default function SettingsPage() {
   const handlePasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setPasswordError('');
+    setPasswordIssue(null);
     setPasswordSuccess(false);
 
     if (passwordForm.newPassword !== passwordForm.confirmPassword) {
-      setPasswordError(t('passwordMismatch'));
+      setPasswordIssue('mismatch');
       return;
     }
 
-    if (passwordForm.newPassword.length < 8) {
-      setPasswordError(t('passwordTooShort'));
+    if (passwordForm.newPassword.length < MIN_PASSWORD_LENGTH) {
+      setPasswordIssue('tooShort');
       return;
     }
 
@@ -121,8 +161,8 @@ export default function SettingsPage() {
       });
 
       if (!response.ok) {
-        const data = await response.json();
-        setPasswordError(data.error || t('passwordChangeFailed'));
+        const data = await response.json().catch(() => ({}));
+        setPasswordError(translateApiError(tErrors, data.error));
         setPasswordLoading(false);
         return;
       }
@@ -137,6 +177,23 @@ export default function SettingsPage() {
     }
   };
 
+  const handleLogout = async () => {
+    setLogoutError('');
+    setIsLoggingOut(true);
+
+    try {
+      await signOut({ callbackUrl: '/login' });
+    } catch {
+      setLogoutError(translateApiError(tErrors, null));
+      setIsLoggingOut(false);
+    }
+  };
+
+  const percentValid =
+    Number.isInteger(settings.defaultPercent) &&
+    settings.defaultPercent >= 1 &&
+    settings.defaultPercent <= 100;
+
   const hasChanges = originalSettings && (
     settings.name !== originalSettings.name ||
     settings.defaultPercent !== originalSettings.defaultPercent ||
@@ -146,8 +203,40 @@ export default function SettingsPage() {
   if (isLoading) {
     return (
       <div className="p-4 md:p-8">
-        <div className="max-w-4xl mx-auto">
-          <p className="text-gray-600 dark:text-gray-400">{tCommon('loading')}</p>
+        <div className="mx-auto w-full max-w-3xl">
+          <PageHeader title={t('title')} description={t('subtitle')} />
+          <div className="mt-6 space-y-5 sm:space-y-6">
+            <Card>
+              <Skeleton className="h-6 w-32" />
+              <SkeletonRows rows={4} className="mt-5" />
+            </Card>
+            <Card>
+              <Skeleton className="h-6 w-40" />
+              <SkeletonRows rows={3} className="mt-5" />
+            </Card>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="p-4 md:p-8">
+        <div className="mx-auto w-full max-w-3xl">
+          <PageHeader title={t('title')} description={t('subtitle')} />
+          <Alert
+            tone="error"
+            title={t('loadFailed')}
+            className="mt-6"
+            action={
+              <Button variant="secondary" size="sm" onClick={fetchSettings}>
+                {tCommon('retry')}
+              </Button>
+            }
+          >
+            {loadError}
+          </Alert>
         </div>
       </div>
     );
@@ -155,187 +244,241 @@ export default function SettingsPage() {
 
   return (
     <div className="p-4 md:p-8">
-      <div className="max-w-4xl mx-auto">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-2">{t('title')}</h1>
-          <p className="text-gray-700 dark:text-gray-300">{t('subtitle')}</p>
-        </div>
+      <div className="mx-auto w-full max-w-3xl">
+        <PageHeader title={t('title')} description={t('subtitle')} />
 
-        {/* Profile Settings */}
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 md:p-8 mb-6 border border-gray-200 dark:border-gray-700">
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">{t('profile')}</h2>
+        <div className="mt-6 space-y-5 sm:space-y-6">
+          {/* Profile */}
+          <Card>
+            <CardHeader title={t('profile')} />
 
-          {success && (
-            <div className="bg-green-50 dark:bg-green-900/30 text-green-800 dark:text-green-200 p-4 rounded-lg mb-4 border border-green-200 dark:border-green-700">
-              ✓ {t('saveSuccess')}
-            </div>
-          )}
+            <form onSubmit={handleSubmit} className="mt-5 space-y-5">
+              {success ? (
+                <Alert tone="success">{t('saveSuccess')}</Alert>
+              ) : null}
 
-          {error && (
-            <div className="bg-red-50 dark:bg-red-900/30 text-red-800 dark:text-red-200 p-4 rounded-lg mb-4 border border-red-200 dark:border-red-700">
-              {error}
-            </div>
-          )}
+              {error ? (
+                <Alert tone="error" title={t('saveFailed')}>
+                  {error}
+                </Alert>
+              ) : null}
 
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div>
-              <label htmlFor="name" className="block text-sm font-bold text-gray-900 dark:text-gray-100 mb-2">
-                {t('name')}
-              </label>
-              <input
+              <Field
                 id="name"
+                label={t('name')}
                 type="text"
                 value={settings.name}
                 onChange={(e) => setSettings({ ...settings, name: e.target.value })}
                 placeholder={t('namePlaceholder')}
-                className="w-full px-4 py-3 bg-white dark:bg-gray-700 border-2 border-gray-400 dark:border-gray-600 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 focus:border-transparent text-lg"
+                autoComplete="name"
               />
-            </div>
 
-            <div>
-              <label htmlFor="email" className="block text-sm font-bold text-gray-900 dark:text-gray-100 mb-2">
-                {t('email')}
-              </label>
-              <input
-                id="email"
-                type="email"
-                value={settings.email}
-                disabled
-                className="w-full px-4 py-3 bg-gray-100 dark:bg-gray-900 border-2 border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400 rounded-lg text-lg cursor-not-allowed"
-              />
-              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{t('emailCannotChange')}</p>
-            </div>
+              <div>
+                <div className="mb-1.5 text-sm font-semibold text-ink">
+                  {t('email')}
+                </div>
+                <div className="rounded-control border border-line bg-surface-sunken px-3 py-2.5">
+                  <span className="bidi-isolate block break-all text-sm text-ink-muted">
+                    {settings.email}
+                  </span>
+                </div>
+                <p className="mt-1.5 text-xs text-ink-faint">
+                  {t('emailCannotChange')}
+                </p>
+              </div>
 
-            <div>
-              <label htmlFor="defaultPercent" className="block text-sm font-bold text-gray-900 dark:text-gray-100 mb-2">
-                {t('defaultPercentage')} (%)
-              </label>
-              <input
+              <SectionRule>{t('preferences')}</SectionRule>
+
+              <Field
                 id="defaultPercent"
+                label={t('defaultPercentage')}
+                affix="%"
                 type="number"
-                min="1"
-                max="100"
-                value={settings.defaultPercent}
-                onChange={(e) => setSettings({ ...settings, defaultPercent: parseInt(e.target.value) })}
-                className="w-full px-4 py-3 bg-white dark:bg-gray-700 border-2 border-gray-400 dark:border-gray-600 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 focus:border-transparent text-lg"
+                inputMode="numeric"
+                min={1}
+                max={100}
+                step={1}
+                value={Number.isNaN(settings.defaultPercent) ? '' : settings.defaultPercent}
+                onChange={(e) =>
+                  setSettings({
+                    ...settings,
+                    defaultPercent: parseInt(e.target.value, 10),
+                  })
+                }
+                hint={t('defaultPercentageHelp')}
+                error={percentValid ? undefined : t('percentRange')}
               />
-              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">{t('defaultPercentageHelp')}</p>
-            </div>
 
-            <div>
-              <label htmlFor="locale" className="block text-sm font-bold text-gray-900 dark:text-gray-100 mb-2">
-                {t('language')}
-              </label>
-              <select
+              <SelectField
                 id="locale"
+                label={t('language')}
                 value={settings.locale}
                 onChange={(e) => setSettings({ ...settings, locale: e.target.value })}
-                className="w-full px-4 py-3 bg-white dark:bg-gray-700 border-2 border-gray-400 dark:border-gray-600 text-gray-900 dark:text-gray-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 focus:border-transparent text-lg"
+                hint={t('languageHelp')}
               >
                 <option value="he">עברית (Hebrew)</option>
                 <option value="en">English</option>
-              </select>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">{t('languageHelp')}</p>
-            </div>
+              </SelectField>
 
-            <button
-              type="submit"
-              disabled={isSaving || success || !hasChanges}
-              className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-700 dark:hover:bg-indigo-600 text-white rounded-lg font-bold text-lg shadow-md transition disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isSaving ? t('saving') : success ? `✓ ${t('saved')}` : tCommon('save')}
-            </button>
-          </form>
-        </div>
+              <Button
+                type="submit"
+                size="lg"
+                fullWidth
+                pending={isSaving}
+                pendingLabel={t('saving')}
+                disabled={isSaving || success || !hasChanges || !percentValid}
+              >
+                {tCommon('save')}
+              </Button>
+            </form>
+          </Card>
 
-        {/* Change Password */}
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 md:p-8 border border-gray-200 dark:border-gray-700">
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">{t('changePassword')}</h2>
+          {/* Password */}
+          <Card>
+            <CardHeader title={t('changePassword')} />
 
-          {passwordSuccess && (
-            <div className="bg-green-50 dark:bg-green-900/30 text-green-800 dark:text-green-200 p-4 rounded-lg mb-4 border border-green-200 dark:border-green-700">
-              ✓ {t('passwordChangeSuccess')}
-            </div>
-          )}
+            <form onSubmit={handlePasswordSubmit} className="mt-5 space-y-5">
+              {passwordSuccess ? (
+                <Alert tone="success">{t('passwordChangeSuccess')}</Alert>
+              ) : null}
 
-          {passwordError && (
-            <div className="bg-red-50 dark:bg-red-900/30 text-red-800 dark:text-red-200 p-4 rounded-lg mb-4 border border-red-200 dark:border-red-700">
-              {passwordError}
-            </div>
-          )}
+              {passwordError ? (
+                <Alert tone="error" title={t('passwordChangeFailed')}>
+                  {passwordError}
+                </Alert>
+              ) : null}
 
-          <form onSubmit={handlePasswordSubmit} className="space-y-6">
-            <div>
-              <label htmlFor="currentPassword" className="block text-sm font-bold text-gray-900 dark:text-gray-100 mb-2">
-                {t('currentPassword')}
-              </label>
-              <input
+              <Field
                 id="currentPassword"
+                label={t('currentPassword')}
                 type="password"
                 required
+                autoComplete="current-password"
                 value={passwordForm.currentPassword}
-                onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })}
-                className="w-full px-4 py-3 bg-white dark:bg-gray-700 border-2 border-gray-400 dark:border-gray-600 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 focus:border-transparent text-lg"
+                onChange={(e) => {
+                  setPasswordForm({ ...passwordForm, currentPassword: e.target.value });
+                  setPasswordError('');
+                }}
               />
-            </div>
 
-            <div>
-              <label htmlFor="newPassword" className="block text-sm font-bold text-gray-900 dark:text-gray-100 mb-2">
-                {t('newPassword')}
-              </label>
-              <input
+              <Field
                 id="newPassword"
+                label={t('newPassword')}
                 type="password"
                 required
-                minLength={8}
+                minLength={MIN_PASSWORD_LENGTH}
+                autoComplete="new-password"
+                hint={t('passwordMinLength', { count: MIN_PASSWORD_LENGTH })}
+                error={passwordIssue === 'tooShort' ? t('passwordTooShort') : undefined}
                 value={passwordForm.newPassword}
-                onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
-                className="w-full px-4 py-3 bg-white dark:bg-gray-700 border-2 border-gray-400 dark:border-gray-600 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 focus:border-transparent text-lg"
+                onChange={(e) => {
+                  setPasswordForm({ ...passwordForm, newPassword: e.target.value });
+                  setPasswordIssue(null);
+                }}
               />
-              <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">Minimum 8 characters</p>
-            </div>
 
-            <div>
-              <label htmlFor="confirmPassword" className="block text-sm font-bold text-gray-900 dark:text-gray-100 mb-2">
-                {t('confirmPassword')}
-              </label>
-              <input
+              <Field
                 id="confirmPassword"
+                label={t('confirmPassword')}
                 type="password"
                 required
+                autoComplete="new-password"
+                error={passwordIssue === 'mismatch' ? t('passwordMismatch') : undefined}
                 value={passwordForm.confirmPassword}
-                onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
-                className="w-full px-4 py-3 bg-white dark:bg-gray-700 border-2 border-gray-400 dark:border-gray-600 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 focus:border-transparent text-lg"
+                onChange={(e) => {
+                  setPasswordForm({ ...passwordForm, confirmPassword: e.target.value });
+                  setPasswordIssue(null);
+                }}
               />
+
+              <Button
+                type="submit"
+                size="lg"
+                fullWidth
+                pending={passwordLoading}
+                pendingLabel={t('changing')}
+                disabled={passwordLoading || passwordSuccess}
+              >
+                {t('changePassword')}
+              </Button>
+            </form>
+          </Card>
+
+          {/* Session */}
+          <Card>
+            <CardHeader
+              title={t('accountActions')}
+              description={t('sessionDescription')}
+            />
+
+            <div className="mt-5 flex flex-wrap gap-3">
+              <Button
+                variant="danger"
+                onClick={() => {
+                  setLogoutError('');
+                  setLogoutOpen(true);
+                }}
+                startSlot={
+                  <svg
+                    className="h-5 w-5 rtl:rotate-180"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+                    />
+                  </svg>
+                }
+              >
+                {t('logout')}
+              </Button>
             </div>
-
-            <button
-              type="submit"
-              disabled={passwordLoading || passwordSuccess}
-              className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-700 dark:hover:bg-indigo-600 text-white rounded-lg font-bold text-lg shadow-md transition disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {passwordLoading ? t('changing') : passwordSuccess ? `✓ ${t('changed')}` : t('changePassword')}
-            </button>
-          </form>
-        </div>
-
-        {/* Account Actions */}
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 md:p-8 border border-gray-200 dark:border-gray-700">
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">{t('accountActions')}</h2>
-          <button
-            onClick={async () => {
-              await signOut({ callbackUrl: '/login' });
-            }}
-            className="w-full py-4 bg-red-600 hover:bg-red-700 dark:bg-red-700 dark:hover:bg-red-600 text-white rounded-lg font-bold text-lg shadow-md transition flex items-center justify-center gap-2"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-            </svg>
-            {t('logout')}
-          </button>
+          </Card>
         </div>
       </div>
+
+      <Dialog
+        open={logoutOpen}
+        onClose={() => {
+          if (!isLoggingOut) setLogoutOpen(false);
+        }}
+        title={t('logoutConfirmTitle')}
+        size="sm"
+        closeLabel={tCommon('close')}
+        footer={
+          <div className="flex flex-wrap gap-3">
+            <Button
+              variant="secondary"
+              className="flex-1"
+              disabled={isLoggingOut}
+              onClick={() => setLogoutOpen(false)}
+            >
+              {tCommon('cancel')}
+            </Button>
+            <Button
+              variant="dangerSolid"
+              className="flex-1"
+              pending={isLoggingOut}
+              pendingLabel={t('loggingOut')}
+              onClick={handleLogout}
+            >
+              {t('logout')}
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-3">
+          <p className="text-sm leading-relaxed text-ink-muted">
+            {t('logoutConfirmDescription')}
+          </p>
+          {logoutError ? <Alert tone="error">{logoutError}</Alert> : null}
+        </div>
+      </Dialog>
     </div>
   );
 }

@@ -3,6 +3,8 @@
 import { useRouter, usePathname } from '@/i18n/routing';
 import { useSearchParams } from 'next/navigation';
 import { getPreviousMonth, getNextMonth } from '@/lib/calculations';
+import { Button } from '@/components/ui';
+import { cn } from '@/lib/utils';
 
 interface MonthNavigatorProps {
   currentMonth: string;
@@ -14,14 +16,20 @@ interface MonthNavigatorProps {
     nextMonth: string;
     currentMonth: string;
   };
+  /** Optional wrapper classes. Defaults to the original bottom margin. */
+  className?: string;
 }
 
+/**
+ * Moves the `?month=` param on whatever page it sits on — the dashboard and
+ * the income page share it, so it must stay route-agnostic.
+ */
 export default function MonthNavigator({
   currentMonth,
   maxMonth,
   formattedMonth,
-  locale,
   translations,
+  className,
 }: MonthNavigatorProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -40,49 +48,71 @@ export default function MonthNavigator({
   };
 
   return (
-    <div className="flex items-center justify-center gap-4 mb-6">
-      <button
-        onClick={() => navigateToMonth(getPreviousMonth(currentMonth))}
-        className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-        aria-label={translations.previousMonth}
-      >
-        <svg
-          className="w-6 h-6 text-gray-600 dark:text-gray-300 rtl:rotate-180"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
+    <div
+      className={cn(
+        'mb-6 flex flex-wrap items-center justify-center gap-2',
+        className
+      )}
+    >
+      <div className="flex items-center gap-1 rounded-full border border-line bg-surface p-1 shadow-card">
+        <Button
+          variant="ghost"
+          icon
+          className="rounded-full"
+          onClick={() => navigateToMonth(getPreviousMonth(currentMonth))}
+          aria-label={translations.previousMonth}
         >
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-        </svg>
-      </button>
+          <svg
+            className="h-5 w-5 rtl:rotate-180"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={1.75}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M15 19l-7-7 7-7" />
+          </svg>
+        </Button>
 
-      <h2 className="text-xl font-semibold text-gray-900 dark:text-white min-w-[200px] text-center">
-        {formattedMonth}
-      </h2>
+        {/* No fixed width: a long month name in either language sets its own. */}
+        <h2 className="min-w-0 px-2 text-center font-display text-base font-semibold text-ink sm:text-lg">
+          {formattedMonth}
+        </h2>
 
-      <button
-        onClick={() => navigateToMonth(getNextMonth(currentMonth))}
-        disabled={isAtMax}
-        className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-        aria-label={translations.nextMonth}
-      >
-        <svg
-          className="w-6 h-6 text-gray-600 dark:text-gray-300 rtl:rotate-180"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
+        <Button
+          variant="ghost"
+          icon
+          className="rounded-full"
+          onClick={() => navigateToMonth(getNextMonth(currentMonth))}
+          disabled={isAtMax}
+          aria-label={translations.nextMonth}
         >
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-        </svg>
-      </button>
+          <svg
+            className="h-5 w-5 rtl:rotate-180"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={1.75}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M9 5l7 7-7 7" />
+          </svg>
+        </Button>
+      </div>
 
       {!isAtMax && (
-        <button
+        <Button
+          variant="secondary"
+          size="sm"
+          className="ms-2"
           onClick={() => navigateToMonth(maxMonth)}
-          className="ms-2 px-3 py-1.5 text-xs font-semibold text-white bg-purple-600 hover:bg-purple-700 dark:bg-purple-600 dark:hover:bg-purple-500 rounded-lg shadow-sm transition-colors active:scale-95"
         >
           {translations.currentMonth}
-        </button>
+        </Button>
       )}
     </div>
   );

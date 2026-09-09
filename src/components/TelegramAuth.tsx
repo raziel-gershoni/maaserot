@@ -1,8 +1,10 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { signIn } from 'next-auth/react';
+import { useTranslations } from 'next-intl';
 import { useRouter } from '@/i18n/routing';
+import { Alert, Button, Card, Spinner } from '@/components/ui';
 
 declare global {
   interface Window {
@@ -46,16 +48,19 @@ declare global {
 /**
  * Detects if running inside Telegram Mini App and auto-authenticates.
  * Mount this in the login page or root layout.
+ *
+ * `idle` renders the same waiting panel as `authenticating`: the login page
+ * swaps its form out the moment it detects Telegram, so returning null here
+ * left the viewer on a blank screen for the length of the handoff.
  */
 export default function TelegramAuth() {
   const [status, setStatus] = useState<'idle' | 'authenticating' | 'error'>('idle');
   const router = useRouter();
   const attempted = useRef(false);
+  const t = useTranslations('auth');
+  const tc = useTranslations('common');
 
-  useEffect(() => {
-    if (attempted.current) return;
-    attempted.current = true;
-
+  const authenticate = useCallback(() => {
     const tg = window.Telegram?.WebApp;
     if (!tg?.initData) return; // Not inside Telegram
 
@@ -83,37 +88,56 @@ export default function TelegramAuth() {
     });
   }, [router]);
 
-  if (status === 'authenticating') {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-50 dark:bg-gray-900">
-        <div className="text-center space-y-4">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto" />
-          <p className="text-gray-600 dark:text-gray-400 text-lg">
-            Connecting via Telegram...
-          </p>
-        </div>
-      </div>
-    );
-  }
+  useEffect(() => {
+    if (attempted.current) return;
+    attempted.current = true;
+
+    // Reads window.Telegram and starts the sign-in handshake on mount, which
+    // cannot happen during render. Guarded to one attempt by the ref above.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    authenticate();
+  }, [authenticate]);
 
   if (status === 'error') {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-50 dark:bg-gray-900">
-        <div className="text-center space-y-4 p-8">
-          <p className="text-red-600 dark:text-red-400 text-lg">
-            Telegram authentication failed. Please try again.
-          </p>
-          <button
-            onClick={() => window.Telegram?.WebApp.close()}
-            className="px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold"
+      <Card>
+        <Alert tone="error" title={t('telegramFailedTitle')}>
+          {t('telegramFailedBody')}
+        </Alert>
+        <div className="mt-5 flex flex-wrap gap-3">
+          <Button
+            variant="primary"
+            size="lg"
+            className="flex-1"
+            onClick={authenticate}
           >
-            Close
-          </button>
+            {tc('retry')}
+          </Button>
+          <Button
+            variant="secondary"
+            size="lg"
+            className="flex-1"
+            onClick={() => window.Telegram?.WebApp.close()}
+          >
+            {tc('close')}
+          </Button>
         </div>
-      </div>
+      </Card>
     );
   }
 
-  // Not in Telegram or already authenticated — render nothing
-  return null;
+  // `idle` and `authenticating` share one panel — from the viewer's side both
+  // are the same moment of waiting.
+  return (
+    <Card>
+      <div className="flex flex-col items-center py-6 text-center">
+        <span className="flex h-14 w-14 items-center justify-center rounded-full bg-brand-soft text-brand">
+          <Spinner size="lg" />
+        </span>
+        <p className="mt-4 font-display text-lg font-semibold text-ink">
+          {t('telegramConnecting')}
+        </p>
+      </div>
+    </Card>
+  );
 }

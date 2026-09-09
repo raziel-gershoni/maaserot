@@ -1,10 +1,36 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Link } from '@/i18n/routing';
 import { useParams } from 'next/navigation';
-import LanguageSwitcher from '@/components/LanguageSwitcher';
+import { Alert, buttonStyles, Card, Spinner } from '@/components/ui';
+import { isErrorCode, translateApiError, type ErrorCode } from '@/lib/errorCodes';
+
+/**
+ * One heading treatment for all three states, so the card does not resize
+ * under the reader when verification resolves.
+ */
+const HEADING = 'font-display text-2xl font-bold tracking-tight text-ink sm:text-3xl';
+
+/**
+ * Bridge for the prose the verification route still returns. A stable code
+ * passes straight through, so this keeps working once that route is migrated.
+ */
+function resolveTokenError(value: unknown): ErrorCode {
+  if (isErrorCode(value)) return value;
+
+  if (typeof value === 'string') {
+    const message = value.toLowerCase();
+    if (message.includes('expire')) return 'TOKEN_EXPIRED';
+    if (message.includes('not found')) return 'USER_NOT_FOUND';
+    if (message.includes('invalid') || message.includes('token')) {
+      return 'TOKEN_INVALID';
+    }
+  }
+
+  return 'SERVER_ERROR';
+}
 
 export default function VerifyTokenPage() {
   const params = useParams();
@@ -13,9 +39,10 @@ export default function VerifyTokenPage() {
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>(
     isValidToken ? 'loading' : 'error'
   );
-  const [errorMessage, setErrorMessage] = useState(isValidToken ? '' : 'Invalid verification link');
+  const [errorCode, setErrorCode] = useState<ErrorCode>('TOKEN_INVALID');
   const [email, setEmail] = useState('');
-  const tc = useTranslations('common');
+  const t = useTranslations('auth');
+  const te = useTranslations('errors');
 
   useEffect(() => {
     if (!isValidToken) {
@@ -25,19 +52,19 @@ export default function VerifyTokenPage() {
     const verifyEmail = async () => {
       try {
         const response = await fetch(`/api/auth/verify-email?token=${token}`);
-        const data = await response.json();
+        const data = await response.json().catch(() => null);
 
         if (!response.ok) {
           setStatus('error');
-          setErrorMessage(data.error || 'Verification failed');
+          setErrorCode(resolveTokenError(data?.error ?? data?.code));
           return;
         }
 
         setStatus('success');
-        setEmail(data.email || '');
+        setEmail(data?.email || '');
       } catch {
         setStatus('error');
-        setErrorMessage('An error occurred during verification');
+        setErrorCode('SERVER_ERROR');
       }
     };
 
@@ -45,89 +72,110 @@ export default function VerifyTokenPage() {
   }, [token, isValidToken]);
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      {/* Header */}
-      <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 py-4">
-        <div className="max-w-7xl mx-auto flex justify-between items-center">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{tc('appName')}</h1>
-          <LanguageSwitcher />
+    <Card>
+      {status === 'loading' && (
+        <div className="flex flex-col items-center text-center">
+          <span className="flex h-14 w-14 items-center justify-center rounded-full bg-brand-soft text-brand">
+            <Spinner size="lg" />
+          </span>
+          <h1 className={`mt-4 ${HEADING}`}>{t('verifying')}</h1>
+          <p className="mt-2 text-sm text-ink-muted">{t('verifyingHint')}</p>
         </div>
-      </header>
+      )}
 
-      {/* Verification Result */}
-      <div className="flex items-center justify-center px-4 py-12">
-        <div className="max-w-md w-full space-y-8 p-8 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700">
-          {status === 'loading' && (
-            <div className="text-center">
-              {/* Loading Spinner */}
-              <div className="mx-auto w-16 h-16 border-4 border-blue-200 dark:border-blue-800 border-t-blue-600 dark:border-t-blue-400 rounded-full animate-spin mb-4"></div>
-              <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">מאמת את האימייל שלך...</h2>
-              <p className="text-gray-600 dark:text-gray-400">אנא המתן רגע</p>
-            </div>
+      {status === 'success' && (
+        <div className="flex flex-col items-center text-center">
+          <span
+            aria-hidden="true"
+            className="flex h-14 w-14 items-center justify-center rounded-full bg-positive-soft text-positive"
+          >
+            <svg
+              className="h-7 w-7"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              viewBox="0 0 24 24"
+            >
+              <path d="M5 13l4 4L19 7" />
+            </svg>
+          </span>
+          <h1 className={`mt-4 ${HEADING}`}>{t('verifiedTitle')}</h1>
+          {email && (
+            <p className="bidi-isolate mt-2 break-all font-semibold text-ink">
+              {email}
+            </p>
           )}
-
-          {status === 'success' && (
-            <div className="text-center">
-              {/* Success Icon */}
-              <div className="mx-auto w-16 h-16 bg-green-100 dark:bg-green-900 rounded-full flex items-center justify-center mb-4">
-                <svg className="w-8 h-8 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-              </div>
-              <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">אימות הצליח!</h2>
-              <p className="text-gray-600 dark:text-gray-400 mb-6">
-                האימייל שלך אומת בהצלחה.
-              </p>
-              {email && (
-                <p className="text-green-600 dark:text-green-400 font-semibold mb-6">
-                  {email}
-                </p>
-              )}
-              <p className="text-gray-600 dark:text-gray-400 text-sm mb-8">
-                עכשיו תוכל להתחבר ולהתחיל להשתמש במערכת.
-              </p>
-              <Link
-                href="/login"
-                className="inline-block w-full py-4 bg-blue-600 hover:bg-blue-700 dark:bg-blue-700 dark:hover:bg-blue-600 text-white rounded-lg font-bold text-lg shadow-md transition"
-              >
-                התחבר למערכת
-              </Link>
-            </div>
-          )}
-
-          {status === 'error' && (
-            <div className="text-center">
-              {/* Error Icon */}
-              <div className="mx-auto w-16 h-16 bg-red-100 dark:bg-red-900 rounded-full flex items-center justify-center mb-4">
-                <svg className="w-8 h-8 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </div>
-              <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">האימות נכשל</h2>
-              <div className="bg-red-50 dark:bg-red-900/30 text-red-800 dark:text-red-200 p-4 rounded-lg border border-red-200 dark:border-red-700 mb-6">
-                {errorMessage}
-              </div>
-              <p className="text-gray-600 dark:text-gray-400 text-sm mb-8">
-                הקישור עשוי להיות לא תקף או שפג תוקפו.
-              </p>
-              <div className="space-y-3">
-                <Link
-                  href="/verify-email"
-                  className="inline-block w-full py-4 bg-blue-600 hover:bg-blue-700 dark:bg-blue-700 dark:hover:bg-blue-600 text-white rounded-lg font-bold shadow-md transition"
-                >
-                  שלח שוב קישור אימות
-                </Link>
-                <Link
-                  href="/login"
-                  className="inline-block w-full py-3 bg-gray-600 hover:bg-gray-700 dark:bg-gray-700 dark:hover:bg-gray-600 text-white rounded-lg font-bold shadow-md transition"
-                >
-                  חזרה להתחברות
-                </Link>
-              </div>
-            </div>
-          )}
+          <p className="mt-3 text-sm leading-relaxed text-ink-muted">
+            {t('verifiedBody')}
+          </p>
+          <Link
+            href="/login"
+            className={buttonStyles({
+              variant: 'primary',
+              size: 'lg',
+              fullWidth: true,
+              className: 'mt-6',
+            })}
+          >
+            {t('signIn')}
+          </Link>
         </div>
-      </div>
-    </div>
+      )}
+
+      {status === 'error' && (
+        <div className="flex flex-col items-center text-center">
+          <span
+            aria-hidden="true"
+            className="flex h-14 w-14 items-center justify-center rounded-full bg-critical-soft text-critical"
+          >
+            <svg
+              className="h-7 w-7"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              viewBox="0 0 24 24"
+            >
+              <path d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </span>
+          <h1 className={`mt-4 ${HEADING}`}>{t('verifyFailedTitle')}</h1>
+
+          <Alert tone="error" className="mt-4 w-full text-start">
+            {translateApiError(te, errorCode)}
+          </Alert>
+
+          <p className="mt-3 text-sm leading-relaxed text-ink-muted">
+            {t('verifyFailedBody')}
+          </p>
+
+          <div className="mt-6 w-full space-y-3">
+            <Link
+              href="/verify-email"
+              className={buttonStyles({
+                variant: 'primary',
+                size: 'lg',
+                fullWidth: true,
+              })}
+            >
+              {t('resendVerification')}
+            </Link>
+            <Link
+              href="/login"
+              className={buttonStyles({
+                variant: 'secondary',
+                size: 'lg',
+                fullWidth: true,
+              })}
+            >
+              {t('backToLogin')}
+            </Link>
+          </div>
+        </div>
+      )}
+    </Card>
   );
 }

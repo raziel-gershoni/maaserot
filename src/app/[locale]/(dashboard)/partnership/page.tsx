@@ -1,9 +1,22 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useRouter } from '@/i18n/routing';
-import ConfirmDialog from '@/components/ConfirmDialog';
+import { translateApiError } from '@/lib/errorCodes';
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  CardHeader,
+  Dialog,
+  EmptyState,
+  Field,
+  PageHeader,
+  SectionRule,
+  Skeleton,
+} from '@/components/ui';
 
 interface User {
   id: string;
@@ -22,76 +35,243 @@ interface Partnership {
   createdAt: string;
 }
 
+interface PartnershipResponse {
+  currentPartnership?: Partnership | null;
+  pendingInvitations?: Partnership[];
+  sentInvitations?: Partnership[];
+}
+
+type LoadStatus = 'loading' | 'ready' | 'error';
+type RowAction = 'accept' | 'decline' | 'cancel';
+type ErrorScope = 'received' | 'sent';
+
+/* -------------------------------------------------------------------------- */
+/* Icons — non-directional, so no rtl:rotate-180 needed.                       */
+/* -------------------------------------------------------------------------- */
+
+function CheckIcon() {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      className="h-3.5 w-3.5"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M3 8.5l3.5 3.5L13 5" />
+    </svg>
+  );
+}
+
+function ClockIcon() {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      className="h-3.5 w-3.5"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="8" cy="8" r="6" />
+      <path d="M8 4.5V8l2.25 1.5" />
+    </svg>
+  );
+}
+
+function PartnersIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className="h-5 w-5"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="9" cy="8" r="3.25" />
+      <path d="M3.5 19.5a5.5 5.5 0 0111 0" />
+      <path d="M16 5.4a3.25 3.25 0 010 5.2M17.5 14.6a5.5 5.5 0 013 4.9" />
+    </svg>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Pieces                                                                      */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * One identity treatment for every party on the page. The email is a Latin run
+ * inside Hebrew, so it is bidi-isolated — otherwise the algorithm reorders it
+ * around the surrounding text.
+ */
+function Party({ user }: { user: User }) {
+  const name = user.name?.trim() ?? '';
+  const display = name || user.email;
+  const initial = display.charAt(0).toUpperCase();
+
+  return (
+    <div className="flex min-w-0 items-center gap-3">
+      <span
+        aria-hidden="true"
+        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-line bg-surface font-display text-sm font-semibold text-ink-muted"
+      >
+        {initial}
+      </span>
+      <div className="min-w-0">
+        <p className="truncate font-display font-semibold text-ink">
+          {name || <span className="bidi-isolate">{user.email}</span>}
+        </p>
+        {name ? (
+          <p className="mt-0.5 truncate text-sm text-ink-muted bidi-isolate">
+            {user.email}
+          </p>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function PartnershipSkeleton() {
+  return (
+    <div aria-busy="true">
+      <Card>
+        <Skeleton className="h-6 w-40" />
+        <Skeleton className="mt-5 h-[4.5rem] w-full" />
+        <Skeleton className="mt-8 h-3 w-28" />
+        <Skeleton className="mt-4 h-11 w-full" />
+        <Skeleton className="mt-3 h-11 w-full" />
+      </Card>
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Page                                                                        */
+/* -------------------------------------------------------------------------- */
+
 export default function PartnershipPage() {
   const [email, setEmail] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
 
-  const [currentPartnership, setCurrentPartnership] = useState<Partnership | null>(null);
+  const [currentPartnership, setCurrentPartnership] =
+    useState<Partnership | null>(null);
   const [pendingInvitations, setPendingInvitations] = useState<Partnership[]>([]);
   const [sentInvitations, setSentInvitations] = useState<Partnership[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [confirmLeave, setConfirmLeave] = useState(false);
 
+  // Nothing state-dependent renders until the first fetch resolves, so the
+  // invite form can no longer flash before an existing partnership loads.
+  const [status, setStatus] = useState<LoadStatus>('loading');
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [busy, setBusy] = useState<{ id: string; action: RowAction } | null>(
+    null
+  );
+  const [actionError, setActionError] = useState<{
+    scope: ErrorScope;
+    message: string;
+  } | null>(null);
+  const [accepted, setAccepted] = useState(false);
+  const [leavePending, setLeavePending] = useState(false);
+  const [leaveError, setLeaveError] = useState<string | null>(null);
+  const [leaveDone, setLeaveDone] = useState(false);
+
   const t = useTranslations('partnership');
+  const tCommon = useTranslations('common');
+  const tErrors = useTranslations('errors');
   const router = useRouter();
+
+  /** The current user's id, from an invitation when possible, settings otherwise. */
+  const resolveCurrentUserId = useCallback(
+    async (data: PartnershipResponse): Promise<string | null> => {
+      if (data.sentInvitations && data.sentInvitations.length > 0) {
+        return data.sentInvitations[0].user1Id;
+      }
+      if (data.pendingInvitations && data.pendingInvitations.length > 0) {
+        return data.pendingInvitations[0].user2Id;
+      }
+      try {
+        const response = await fetch('/api/settings');
+        if (!response.ok) return null;
+        const settings = await response.json();
+        return settings.userId ?? null;
+      } catch {
+        return null;
+      }
+    },
+    []
+  );
+
+  const fetchPartnerships = useCallback(
+    async ({ silent = false }: { silent?: boolean } = {}) => {
+      if (!silent) {
+        setStatus('loading');
+        setLoadError(null);
+      }
+
+      try {
+        const response = await fetch('/api/partnership');
+        if (!response.ok) {
+          const data = await response.json().catch(() => ({}));
+          throw new Error(translateApiError(tErrors, data?.error));
+        }
+
+        const data: PartnershipResponse = await response.json();
+        const partnership = data.currentPartnership ?? null;
+        const userId = await resolveCurrentUserId(data);
+
+        // Without an id we cannot tell which side of the partnership is the
+        // viewer — better an error than naming someone as their own partner.
+        if (partnership && !userId) {
+          throw new Error(translateApiError(tErrors, null));
+        }
+
+        setCurrentUserId(userId);
+        setCurrentPartnership(partnership);
+        setPendingInvitations(data.pendingInvitations ?? []);
+        setSentInvitations(data.sentInvitations ?? []);
+        setLoadError(null);
+        setStatus('ready');
+      } catch (err) {
+        const message =
+          err instanceof Error && err.message
+            ? err.message
+            : translateApiError(tErrors, null);
+        setLoadError(message);
+        // A silent refresh keeps what is on screen; the message surfaces above
+        // the card instead of replacing it.
+        if (!silent) setStatus('error');
+      }
+    },
+    [resolveCurrentUserId, tErrors]
+  );
 
   useEffect(() => {
     fetchPartnerships();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [fetchPartnerships]);
 
-  const fetchPartnerships = async () => {
-    try {
-      const response = await fetch('/api/partnership');
-      if (response.ok) {
-        const data = await response.json();
-        setCurrentPartnership(data.currentPartnership || null);
-        setPendingInvitations(data.pendingInvitations || []);
-        setSentInvitations(data.sentInvitations || []);
+  useEffect(() => {
+    if (!success) return;
+    const timer = setTimeout(() => setSuccess(false), 3000);
+    return () => clearTimeout(timer);
+  }, [success]);
 
-        // Determine current user ID from the data
-        if (data.currentPartnership) {
-          // We can infer current user by checking who appears in both user positions
-          // But easier: API should tell us. For now, check sentInvitations
-          if (data.sentInvitations && data.sentInvitations.length > 0) {
-            setCurrentUserId(data.sentInvitations[0].user1Id);
-          } else if (data.pendingInvitations && data.pendingInvitations.length > 0) {
-            setCurrentUserId(data.pendingInvitations[0].user2Id);
-          } else if (data.currentPartnership) {
-            // As fallback, we need to get it from settings API
-            fetchCurrentUserId();
-          }
-        } else if (data.sentInvitations && data.sentInvitations.length > 0) {
-          setCurrentUserId(data.sentInvitations[0].user1Id);
-        } else if (data.pendingInvitations && data.pendingInvitations.length > 0) {
-          setCurrentUserId(data.pendingInvitations[0].user2Id);
-        } else {
-          fetchCurrentUserId();
-        }
-      }
-    } catch (error) {
-      console.error('Failed to fetch partnerships:', error);
-    }
-  };
-
-  const fetchCurrentUserId = async () => {
-    try {
-      const response = await fetch('/api/settings');
-      if (response.ok) {
-        const data = await response.json();
-        setCurrentUserId(data.userId);
-      }
-    } catch (error) {
-      console.error('Failed to fetch current user ID:', error);
-    }
-  };
-
-  // Helper to get partner from partnership
-  const getPartner = (partnership: Partnership): User => {
-    if (!currentUserId) return partnership.user1;
-    return partnership.user1Id === currentUserId ? partnership.user2 : partnership.user1;
+  /** The partner is whichever side of the partnership is not the viewer. */
+  const getPartner = (partnership: Partnership): User | null => {
+    if (!currentUserId) return null;
+    return partnership.user1Id === currentUserId
+      ? partnership.user2
+      : partnership.user1;
   };
 
   const handleInvite = async (e: React.FormEvent) => {
@@ -108,255 +288,416 @@ export default function PartnershipPage() {
       });
 
       if (!response.ok) {
-        const data = await response.json();
-        setError(data.error || t('invitationFailed'));
-        setIsLoading(false);
+        const data = await response.json().catch(() => ({}));
+        setError(translateApiError(tErrors, data?.error));
         return;
       }
 
       setSuccess(true);
       setEmail('');
-      fetchPartnerships();
-      setTimeout(() => setSuccess(false), 3000);
+      fetchPartnerships({ silent: true });
     } catch {
-      setError(t('errorOccurred'));
+      setError(translateApiError(tErrors, null));
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleAccept = async (partnershipId: string) => {
+  const patchInvitation = async (
+    partnershipId: string,
+    action: 'accept' | 'decline',
+    scope: ErrorScope
+  ) => {
+    setActionError(null);
+    setBusy({ id: partnershipId, action });
+
     try {
       const response = await fetch('/api/partnership', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ partnershipId, action: 'accept' }),
+        body: JSON.stringify({ partnershipId, action }),
       });
 
-      if (response.ok) {
-        fetchPartnerships();
-        // Redirect to dashboard to see the group view
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        setActionError({ scope, message: translateApiError(tErrors, data?.error) });
+        return;
+      }
+
+      await fetchPartnerships({ silent: true });
+
+      if (action === 'accept') {
+        setAccepted(true);
+        // Land on the group view the partnership just unlocked.
         setTimeout(() => router.push('/dashboard'), 500);
       }
-    } catch (error) {
-      console.error('Failed to accept invitation:', error);
+    } catch {
+      setActionError({ scope, message: translateApiError(tErrors, null) });
+    } finally {
+      setBusy(null);
     }
   };
 
-  const handleDecline = async (partnershipId: string) => {
-    try {
-      const response = await fetch('/api/partnership', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ partnershipId, action: 'decline' }),
-      });
+  const handleAccept = (partnershipId: string) =>
+    patchInvitation(partnershipId, 'accept', 'received');
 
-      if (response.ok) {
-        fetchPartnerships();
-      }
-    } catch (error) {
-      console.error('Failed to decline invitation:', error);
-    }
-  };
+  const handleDecline = (partnershipId: string) =>
+    patchInvitation(partnershipId, 'decline', 'received');
 
   const handleLeave = async () => {
     if (!currentPartnership) return;
 
-    try {
-      const response = await fetch(`/api/partnership?id=${currentPartnership.id}`, {
-        method: 'DELETE',
-      });
+    setLeaveError(null);
+    setLeavePending(true);
 
-      if (response.ok) {
-        fetchPartnerships();
-        setTimeout(() => router.push('/dashboard'), 500);
+    try {
+      const response = await fetch(
+        `/api/partnership?id=${currentPartnership.id}`,
+        { method: 'DELETE' }
+      );
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        setLeaveError(translateApiError(tErrors, data?.error));
+        return;
       }
-    } catch (error) {
-      console.error('Failed to leave partnership:', error);
-    } finally {
+
       setConfirmLeave(false);
+      setLeaveDone(true);
+      await fetchPartnerships({ silent: true });
+      setTimeout(() => router.push('/dashboard'), 500);
+    } catch {
+      setLeaveError(translateApiError(tErrors, null));
+    } finally {
+      setLeavePending(false);
     }
   };
 
   const handleCancelInvitation = async (partnershipId: string) => {
+    setActionError(null);
+    setBusy({ id: partnershipId, action: 'cancel' });
+
     try {
       const response = await fetch(`/api/partnership?id=${partnershipId}`, {
         method: 'DELETE',
       });
 
-      if (response.ok) {
-        fetchPartnerships();
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        setActionError({
+          scope: 'sent',
+          message: translateApiError(tErrors, data?.error),
+        });
+        return;
       }
-    } catch (error) {
-      console.error('Failed to cancel invitation:', error);
+
+      await fetchPartnerships({ silent: true });
+    } catch {
+      setActionError({ scope: 'sent', message: translateApiError(tErrors, null) });
+    } finally {
+      setBusy(null);
     }
   };
 
+  const partner = currentPartnership ? getPartner(currentPartnership) : null;
+  const hasReceived = pendingInvitations.length > 0;
+  const hasSent = sentInvitations.length > 0;
+  const isBusy = busy !== null;
+
+  /* -- Received invitations: pending, so caution. -------------------------- */
+  const receivedList = (
+    <ul className="space-y-3">
+      {pendingInvitations.map((invitation) => {
+        const rowBusy = busy?.id === invitation.id;
+        return (
+          <li
+            key={invitation.id}
+            className="rounded-row border border-caution/30 bg-caution-soft p-4"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <Party user={invitation.user1} />
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  onClick={() => handleAccept(invitation.id)}
+                  disabled={isBusy}
+                  pending={rowBusy && busy?.action === 'accept'}
+                >
+                  {t('accept')}
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={() => handleDecline(invitation.id)}
+                  disabled={isBusy}
+                  pending={rowBusy && busy?.action === 'decline'}
+                >
+                  {t('decline')}
+                </Button>
+              </div>
+            </div>
+          </li>
+        );
+      })}
+    </ul>
+  );
+
+  const receivedError =
+    actionError?.scope === 'received' ? (
+      <Alert tone="error" className="mt-3">
+        {actionError.message}
+      </Alert>
+    ) : null;
+
+  const statusBadge = partner ? (
+    <Badge tone="success" icon={<CheckIcon />}>
+      {t('partnershipActive')}
+    </Badge>
+  ) : hasReceived || hasSent ? (
+    <Badge tone="warning" icon={<ClockIcon />}>
+      {t('waitingForResponse')}
+    </Badge>
+  ) : (
+    <Badge>{t('noPartnership')}</Badge>
+  );
+
   return (
-    <div className="p-4 md:p-8">
-      <div className="max-w-4xl mx-auto">
-        {/* Header */}
-        <div className="mb-6 md:mb-8">
-          <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-900 dark:text-white mb-2">{t('title')}</h1>
-          <p className="text-sm sm:text-base text-gray-700 dark:text-gray-300">{t('subtitle')}</p>
-        </div>
+    <div className="px-4 py-6 sm:px-6 md:py-8">
+      <div className="mx-auto w-full max-w-3xl space-y-6">
+        <PageHeader title={t('title')} description={t('subtitle')} />
 
-        {/* Current Partnership */}
-        {currentPartnership && (() => {
-          const partner = getPartner(currentPartnership);
-          return (
-            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 md:p-8 mb-6 border border-gray-200 dark:border-gray-700">
-              <h2 className="text-xl md:text-2xl font-bold text-gray-900 dark:text-white mb-6">{t('currentPartnership')}</h2>
+        {status === 'loading' ? <PartnershipSkeleton /> : null}
 
-              <div className="flex justify-between items-start p-4 bg-green-50 dark:bg-green-900/30 rounded-lg border border-green-200 dark:border-green-700">
-                <div>
-                  <p className="font-semibold text-gray-900 dark:text-white text-lg">
-                    {partner.name || partner.email}
-                  </p>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                    {partner.email}
-                  </p>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">
-                  ✓ {t('partnershipActive')}
-                </p>
-              </div>
-              <button
-                onClick={() => setConfirmLeave(true)}
-                className="px-4 py-2 bg-red-600 hover:bg-red-700 dark:bg-red-700 dark:hover:bg-red-600 text-white rounded-lg font-medium text-sm transition"
+        {status === 'error' ? (
+          <Alert
+            tone="error"
+            action={
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => fetchPartnerships()}
               >
-                {t('leavePartnership')}
-              </button>
-            </div>
-          </div>
-          );
-        })()}
+                {t('retry')}
+              </Button>
+            }
+          >
+            {loadError ?? translateApiError(tErrors, null)}
+          </Alert>
+        ) : null}
 
-        {/* Pending Invitations (Received) */}
-        {pendingInvitations.length > 0 && (
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 md:p-8 mb-6 border border-gray-200 dark:border-gray-700">
-            <h2 className="text-xl md:text-2xl font-bold text-gray-900 dark:text-white mb-6">{t('pendingInvitations')}</h2>
-
-            <div className="space-y-3">
-              {pendingInvitations.map((invitation) => (
-                <div key={invitation.id} className="flex justify-between items-center p-4 bg-blue-50 dark:bg-blue-900/30 rounded-lg border border-blue-200 dark:border-blue-700">
-                  <div>
-                    <p className="font-semibold text-gray-900 dark:text-white">
-                      {invitation.user1.name || invitation.user1.email}
-                    </p>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
-                      {invitation.user1.email}
-                    </p>
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => handleAccept(invitation.id)}
-                      className="px-4 py-2 bg-green-600 hover:bg-green-700 dark:bg-green-700 dark:hover:bg-green-600 text-white rounded-lg font-medium text-sm transition"
-                    >
-                      {t('accept')}
-                    </button>
-                    <button
-                      onClick={() => handleDecline(invitation.id)}
-                      className="px-4 py-2 bg-gray-500 hover:bg-gray-600 dark:bg-gray-600 dark:hover:bg-gray-500 text-white rounded-lg font-medium text-sm transition"
-                    >
-                      {t('decline')}
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Sent Invitations */}
-        {sentInvitations.length > 0 && (
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 md:p-8 mb-6 border border-gray-200 dark:border-gray-700">
-            <h2 className="text-xl md:text-2xl font-bold text-gray-900 dark:text-white mb-6">{t('sentInvitations')}</h2>
-
-            <div className="space-y-3">
-              {sentInvitations.map((invitation) => (
-                <div key={invitation.id} className="flex justify-between items-center p-4 bg-yellow-50 dark:bg-yellow-900/30 rounded-lg border border-yellow-200 dark:border-yellow-700">
-                  <div>
-                    <p className="font-semibold text-gray-900 dark:text-white">
-                      {invitation.user2.name || invitation.user2.email}
-                    </p>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
-                      {invitation.user2.email}
-                    </p>
-                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                      ⏳ {t('waitingForResponse')}
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => handleCancelInvitation(invitation.id)}
-                    className="px-4 py-2 bg-red-600 hover:bg-red-700 dark:bg-red-700 dark:hover:bg-red-600 text-white rounded-lg font-medium text-sm transition"
+        {status === 'ready' ? (
+          <>
+            {/* A refresh that failed keeps the last good data on screen. */}
+            {loadError ? (
+              <Alert
+                tone="warning"
+                action={
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => fetchPartnerships()}
                   >
-                    {t('cancel')}
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Create Partnership Form (only if no active partnership) */}
-        {!currentPartnership && (
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 md:p-8 border border-gray-200 dark:border-gray-700">
-            <h2 className="text-xl md:text-2xl font-bold text-gray-900 dark:text-white mb-6">{t('invitePartner')}</h2>
-
-            {success && (
-              <div className="bg-green-50 dark:bg-green-900/30 text-green-800 dark:text-green-200 p-4 rounded-lg mb-4 border border-green-200 dark:border-green-700">
-                ✓ {t('invitationSent')}
-              </div>
-            )}
-
-            {error && (
-              <div className="bg-red-50 dark:bg-red-900/30 text-red-800 dark:text-red-200 p-4 rounded-lg mb-4 border border-red-200 dark:border-red-700">
-                {error}
-              </div>
-            )}
-
-            <form onSubmit={handleInvite} className="space-y-4">
-              <div>
-                <label htmlFor="email" className="block text-sm font-bold text-gray-900 dark:text-gray-100 mb-2">
-                  {t('partnerEmail')}
-                </label>
-                <input
-                  id="email"
-                  type="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder={t('emailPlaceholder')}
-                  className="w-full px-4 py-3 bg-white dark:bg-gray-700 border-2 border-gray-400 dark:border-gray-600 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 focus:border-transparent text-base"
-                />
-              </div>
-
-              <button
-                type="submit"
-                disabled={isLoading || success}
-                className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-700 dark:hover:bg-indigo-600 text-white rounded-lg font-bold text-base shadow-md transition disabled:opacity-50 disabled:cursor-not-allowed"
+                    {t('retry')}
+                  </Button>
+                }
               >
-                {isLoading ? t('sending') : success ? `✓ ${t('sent')}` : t('sendInvitation')}
-              </button>
-            </form>
+                {loadError}
+              </Alert>
+            ) : null}
 
-            <div className="mt-6 p-4 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700">
-              <p className="text-sm text-gray-700 dark:text-gray-300">
-                <strong>{t('note')}:</strong> {t('partnershipNote')}
-              </p>
-            </div>
-          </div>
-        )}
+            {accepted ? (
+              <Alert tone="success">{t('invitationAccepted')}</Alert>
+            ) : null}
+
+            {leaveDone ? (
+              <Alert tone="info">{t('partnershipEnded')}</Alert>
+            ) : null}
+
+            <Card>
+              <CardHeader title={t('currentPartnership')} action={statusBadge} />
+
+              {/* -- The current state, whatever it happens to be. --------- */}
+              <div className="mt-5">
+                {partner ? (
+                  <>
+                    <div className="rounded-row border border-positive/25 bg-positive-soft p-4">
+                      <Party user={partner} />
+                    </div>
+                    <div className="mt-4 flex flex-wrap justify-end">
+                      <Button
+                        variant="danger"
+                        onClick={() => {
+                          setLeaveError(null);
+                          setConfirmLeave(true);
+                        }}
+                      >
+                        {t('leavePartnership')}
+                      </Button>
+                    </div>
+                  </>
+                ) : hasReceived ? (
+                  <>
+                    {receivedList}
+                    {receivedError}
+                  </>
+                ) : (
+                  <EmptyState
+                    icon={<PartnersIcon />}
+                    title={t('noPartnership')}
+                    description={t('partnershipNote')}
+                  />
+                )}
+              </div>
+
+              {/* -- Invitations waiting on you, when a partnership already
+                     exists — demoted, but still answerable. --------------- */}
+              {partner && hasReceived ? (
+                <section className="mt-8">
+                  <SectionRule>{t('pendingInvitations')}</SectionRule>
+                  <div className="mt-4">{receivedList}</div>
+                  {receivedError}
+                </section>
+              ) : null}
+
+              {/* -- Invite. ---------------------------------------------- */}
+              {!currentPartnership ? (
+                <section className="mt-8">
+                  <SectionRule>{t('invitePartner')}</SectionRule>
+
+                  <form onSubmit={handleInvite} className="mt-4 space-y-4">
+                    <Field
+                      label={t('partnerEmail')}
+                      type="email"
+                      dir="ltr"
+                      autoComplete="email"
+                      required
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder={t('emailPlaceholder')}
+                      disabled={isLoading}
+                    />
+
+                    {success ? (
+                      <Alert tone="success">{t('invitationSent')}</Alert>
+                    ) : null}
+
+                    {error ? <Alert tone="error">{error}</Alert> : null}
+
+                    <Button
+                      type="submit"
+                      fullWidth
+                      disabled={success}
+                      pending={isLoading}
+                      pendingLabel={t('sending')}
+                    >
+                      {t('sendInvitation')}
+                    </Button>
+                  </form>
+                </section>
+              ) : null}
+
+              {/* -- Invitations you sent: pending, so caution. ------------ */}
+              {hasSent ? (
+                <section className="mt-8">
+                  <SectionRule>{t('sentInvitations')}</SectionRule>
+
+                  <ul className="mt-4 space-y-3">
+                    {sentInvitations.map((invitation) => (
+                      <li
+                        key={invitation.id}
+                        className="rounded-row border border-caution/30 bg-caution-soft p-4"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <Party user={invitation.user2} />
+                          <div className="flex flex-wrap items-center gap-3">
+                            <Badge tone="warning" icon={<ClockIcon />}>
+                              {t('waitingForResponse')}
+                            </Badge>
+                            <Button
+                              variant="danger"
+                              onClick={() => handleCancelInvitation(invitation.id)}
+                              disabled={isBusy}
+                              pending={
+                                busy?.id === invitation.id &&
+                                busy?.action === 'cancel'
+                              }
+                            >
+                              {t('cancel')}
+                            </Button>
+                          </div>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+
+                  {actionError?.scope === 'sent' ? (
+                    <Alert tone="error" className="mt-3">
+                      {actionError.message}
+                    </Alert>
+                  ) : null}
+                </section>
+              ) : null}
+
+              {/* -- What a partnership actually does. The empty state
+                     already carries this copy, so it is not repeated. ----- */}
+              {partner || hasReceived || hasSent ? (
+                <section className="mt-8">
+                  <SectionRule>{t('note')}</SectionRule>
+                  <p className="mt-3 text-sm leading-relaxed text-ink-muted">
+                    {t('partnershipNote')}
+                  </p>
+                </section>
+              ) : null}
+            </Card>
+          </>
+        ) : null}
       </div>
-      <ConfirmDialog
-        isOpen={confirmLeave}
-        onConfirm={handleLeave}
-        onCancel={() => setConfirmLeave(false)}
+
+      <Dialog
+        open={confirmLeave}
+        onClose={() => {
+          if (leavePending) return;
+          setConfirmLeave(false);
+          setLeaveError(null);
+        }}
         title={t('leavePartnership')}
-        message={t('leaveConfirm')}
-        confirmLabel={t('leavePartnership')}
-        cancelLabel={t('cancel')}
-      />
+        description={t('leaveConfirm')}
+        closeLabel={tCommon('close')}
+        size="sm"
+        footer={
+          <div className="flex flex-wrap gap-3">
+            <Button
+              variant="secondary"
+              className="min-w-0 flex-1 basis-32"
+              onClick={() => {
+                setConfirmLeave(false);
+                setLeaveError(null);
+              }}
+              disabled={leavePending}
+            >
+              {tCommon('cancel')}
+            </Button>
+            <Button
+              variant="dangerSolid"
+              className="min-w-0 flex-1 basis-32"
+              onClick={handleLeave}
+              pending={leavePending}
+            >
+              {t('leavePartnership')}
+            </Button>
+          </div>
+        }
+      >
+        {partner ? (
+          <div className="rounded-row border border-line bg-surface-sunken p-4">
+            <Party user={partner} />
+          </div>
+        ) : null}
+
+        {leaveError ? (
+          <Alert tone="error" className="mt-4">
+            {leaveError}
+          </Alert>
+        ) : null}
+      </Dialog>
     </div>
   );
 }

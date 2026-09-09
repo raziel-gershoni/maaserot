@@ -16,7 +16,14 @@
     "history": "History",
     "shared": "Sharing",
     "partnership": "Partnership",
-    "settings": "Settings"
+    "settings": "Settings",
+    "retry": "Try again",
+    "navDashboard": "Home",
+    "navCharities": "Charities",
+    "mainNav": "Main navigation",
+    "account": "Account",
+    "refresh": "Refresh",
+    "processing": "Processing..."
   },
   "auth": {
     "login": "Login",
@@ -32,7 +39,37 @@
     "noAccount": "Don't have an account?",
     "invalidCredentials": "Invalid email or password",
     "orLoginWith": "or",
-    "loginWithTelegram": "Log in with Telegram"
+    "loginWithTelegram": "Log in with Telegram",
+    "loginSubtitle": "Sign in to continue tracking your maaser",
+    "registerSubtitle": "Create an account and start tracking your maaser",
+    "verifyEmailCta": "Verify your email",
+    "passwordHint": "At least 8 characters",
+    "passwordTooShort": "Password must be at least 8 characters",
+    "checkYourEmail": "Check your email",
+    "verificationSentTo": "We sent a verification link to:",
+    "verificationInstructions": "Open the link in that email to verify your account and get started.",
+    "didntGetEmail": "Didn't get the email?",
+    "resend": "Send again",
+    "resending": "Sending...",
+    "resendIn": "You can send again in {seconds} seconds",
+    "resendSuccess": "New verification link sent. Check your inbox.",
+    "emailRequired": "Enter your email address",
+    "alreadyVerified": "This email is already verified. You can sign in.",
+    "tips": "Tips",
+    "tipSpam": "Check your spam or junk folder",
+    "tipLinkExpiry": "The link is valid for 24 hours",
+    "tipCheckAddress": "Make sure the address is correct",
+    "backToLogin": "Back to sign in",
+    "verifying": "Verifying your email...",
+    "verifyingHint": "This takes a moment",
+    "verifiedTitle": "Email verified",
+    "verifiedBody": "Your email is verified. Sign in to start tracking your maaser.",
+    "verifyFailedTitle": "Verification failed",
+    "verifyFailedBody": "The link may be invalid or expired. Send a new link and try again.",
+    "resendVerification": "Send a new verification link",
+    "telegramConnecting": "Connecting via Telegram...",
+    "telegramFailedTitle": "Telegram sign-in failed",
+    "telegramFailedBody": "We couldn't verify your Telegram account. Try again."
   },
   "dashboard": {
     "title": "Dashboard",
@@ -76,7 +113,14 @@
     "nextMonth": "Next month",
     "remindPartner": "Remind to add income",
     "reminderSent": "Reminder sent!",
-    "reminderFailed": "Failed to send"
+    "reminderFailed": "Failed to send",
+    "you": "You",
+    "noDataForMonth": "No data for this month",
+    "decreaseAmount": "Decrease amount",
+    "increaseAmount": "Increase amount",
+    "editAmount": "Edit amount",
+    "fullRemaining": "Full remaining",
+    "remainingAfter": "Left to give"
   },
   "income": {
     "title": "Income",
@@ -104,7 +148,12 @@
     "save": "Save",
     "cancel": "Cancel",
     "frozen": "Frozen",
-    "deleteConfirm": "Are you sure you want to delete this income entry?"
+    "deleteConfirm": "Are you sure you want to delete this income entry?",
+    "entries": "Income entries",
+    "loadFailed": "Couldn't load income",
+    "noIncomeInMonth": "No income was recorded in this month",
+    "viewingPastMonth": "Viewing a past month",
+    "viewingPastMonthHelp": "Income can only be recorded in the current month. This month is view-only."
   },
   "charities": {
     "title": "Fixed Charities",
@@ -132,7 +181,9 @@
     "editCharity": "Edit Fixed Charity",
     "save": "Save",
     "saving": "Saving...",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "activeCount": "{count, plural, =0 {No active charities} one {1 active charity} other {# active charities}}",
+    "amountPlaceholder": "100.00"
   },
   "history": {
     "title": "History",
@@ -158,7 +209,12 @@
     "remaining": "remaining",
     "deletePayment": "Delete Payment",
     "deletePaymentConfirm": "Are you sure you want to delete this payment?",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "incomeCount": "Income ({count})",
+    "monthSummary": "Month summary",
+    "yourIncomeTotal": "Your income",
+    "yourMaaserTotal": "Your maaser",
+    "ownRowsOnly": "These totals cover only your own income"
   },
   "settings": {
     "title": "Settings",
@@ -182,13 +238,21 @@
     "newPassword": "New Password",
     "confirmPassword": "Confirm Password",
     "passwordMismatch": "Passwords do not match",
-    "passwordTooShort": "Password must be at least 6 characters",
+    "passwordTooShort": "Password must be at least 8 characters",
     "changing": "Changing...",
     "changed": "Changed!",
     "passwordChangeSuccess": "Password changed successfully!",
     "passwordChangeFailed": "Failed to change password",
     "accountActions": "Account Actions",
-    "logout": "Logout"
+    "logout": "Logout",
+    "preferences": "Preferences",
+    "percentRange": "Choose a percentage between 1 and 100",
+    "passwordMinLength": "At least {count} characters",
+    "sessionDescription": "Sign out of this device.",
+    "logoutConfirmTitle": "Log out?",
+    "logoutConfirmDescription": "You will need to sign in again to see your maaser data.",
+    "loggingOut": "Logging out...",
+    "loadFailed": "Couldn't load settings"
   },
   "shared": {
     "title": "Sharing",
@@ -251,10 +315,30 @@
     "sent": "Sent!",
     "waitingForResponse": "Waiting for response",
     "note": "Note",
-    "partnershipNote": "A partnership allows you and another person to combine your budgets and make joint maaser payments. Both partners will see the same group dashboard."
+    "partnershipNote": "A partnership allows you and another person to combine your budgets and make joint maaser payments. Both partners will see the same group dashboard.",
+    "retry": "Try again"
   },
   "errors": {
-    "cannotEditFrozenIncome": "Cannot edit income that was recorded before the month was marked as paid",
-    "cannotDeleteFrozenIncome": "Cannot delete income that was recorded before the month was marked as paid"
+    "ACCOUNT_LOCKED": "This account is locked after too many sign-in attempts. Try again later",
+    "ALREADY_HAS_PARTNERSHIP": "An active partnership already exists",
+    "CANNOT_DELETE_FROZEN_INCOME": "You can't delete income from a month that's already been paid",
+    "CANNOT_EDIT_FROZEN_INCOME": "You can't edit income from a month that's already been paid",
+    "CANNOT_INVITE_SELF": "You can't invite yourself",
+    "CHARITY_NOT_FOUND": "That fixed charity no longer exists",
+    "EMAIL_NOT_VERIFIED": "Verify your email address before signing in",
+    "EMAIL_TAKEN": "That email address is already registered",
+    "INCOME_NOT_FOUND": "That income entry no longer exists",
+    "INVALID_CREDENTIALS": "Incorrect email or password",
+    "INVALID_PASSWORD": "Current password is incorrect",
+    "NOTHING_TO_PAY": "There's nothing to pay this month",
+    "PARTNERSHIP_NOT_FOUND": "That partnership no longer exists",
+    "RATE_LIMITED": "Too many attempts. Try again in a few minutes",
+    "SERVER_ERROR": "Something went wrong. Try again in a moment",
+    "TOKEN_EXPIRED": "This link has expired. Request a new one",
+    "TOKEN_INVALID": "This link isn't valid",
+    "UNAUTHORIZED": "Sign in to continue",
+    "USER_NOT_FOUND": "No user found with that address",
+    "VALIDATION_FAILED": "Some details aren't valid. Check them and try again",
+    "WEAK_PASSWORD": "Password must be at least 8 characters"
   }
 }

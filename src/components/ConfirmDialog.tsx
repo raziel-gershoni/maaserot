@@ -1,5 +1,8 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
+import { Button, Dialog } from '@/components/ui';
+
 interface ConfirmDialogProps {
   isOpen: boolean;
   onConfirm: () => void;
@@ -11,6 +14,15 @@ interface ConfirmDialogProps {
   isLoading?: boolean;
 }
 
+/**
+ * The one destructive confirmation. Every call site today is a delete or a
+ * leave, so the confirm is `dangerSolid` — the one place the design system
+ * allows a filled critical button.
+ *
+ * Previously a hand-rolled overlay whose `bg-black bg-opacity-50` compiled to
+ * nothing under Tailwind v4, so the page behind it went solid black. `Dialog`
+ * owns the scrim, portal, focus trap, focus restore, Esc and scroll lock now.
+ */
 export default function ConfirmDialog({
   isOpen,
   onConfirm,
@@ -21,34 +33,44 @@ export default function ConfirmDialog({
   cancelLabel,
   isLoading,
 }: ConfirmDialogProps) {
-  if (!isOpen) return null;
+  const tCommon = useTranslations('common');
+
+  // Esc and the scrim must not abandon a request that is already in flight —
+  // the cancel button was already disabled for the same reason.
+  const handleClose = () => {
+    if (!isLoading) onCancel();
+  };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-sm w-full p-6">
-        <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
-          {title}
-        </h2>
-        <p className="text-gray-600 dark:text-gray-300 mb-6">
-          {message}
-        </p>
-        <div className="flex gap-3">
-          <button
+    <Dialog
+      open={isOpen}
+      onClose={handleClose}
+      title={title}
+      size="sm"
+      closeLabel={tCommon('close')}
+      footer={
+        <div className="flex flex-wrap gap-3">
+          <Button
+            variant="secondary"
+            className="min-w-0 grow basis-32"
             onClick={onCancel}
             disabled={isLoading}
-            className="flex-1 px-4 py-2 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-900 dark:text-white rounded-lg font-semibold transition disabled:opacity-50"
           >
             {cancelLabel}
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="dangerSolid"
+            className="min-w-0 grow basis-32"
             onClick={onConfirm}
-            disabled={isLoading}
-            className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 dark:bg-red-700 dark:hover:bg-red-600 text-white rounded-lg font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed"
+            pending={isLoading}
+            pendingLabel={tCommon('processing')}
           >
-            {isLoading ? '...' : confirmLabel}
-          </button>
+            {confirmLabel}
+          </Button>
         </div>
-      </div>
-    </div>
+      }
+    >
+      <p className="text-sm leading-relaxed text-ink-muted">{message}</p>
+    </Dialog>
   );
 }

@@ -1,21 +1,66 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Link } from '@/i18n/routing';
 import { useSearchParams } from 'next/navigation';
-import LanguageSwitcher from '@/components/LanguageSwitcher';
+import {
+  Alert,
+  Button,
+  Card,
+  Field,
+  SectionRule,
+  Skeleton,
+} from '@/components/ui';
+import { isErrorCode, translateApiError, type ErrorCode } from '@/lib/errorCodes';
+
+const RESEND_COOLDOWN_SECONDS = 60;
+
+/**
+ * Bridge for the prose the resend route still returns. A stable code passes
+ * straight through, so this keeps working once that route is migrated.
+ */
+function resolveResendError(status: number, value: unknown): ErrorCode {
+  if (isErrorCode(value)) return value;
+  if (status === 429) return 'RATE_LIMITED';
+
+  if (typeof value === 'string') {
+    const message = value.toLowerCase();
+    if (message.includes('not found')) return 'USER_NOT_FOUND';
+    if (message.includes('validation')) return 'VALIDATION_FAILED';
+  }
+
+  return 'SERVER_ERROR';
+}
+
+type Feedback = { tone: 'success' | 'error' | 'info'; message: string } | null;
+
+function VerifyEmailSkeleton() {
+  return (
+    <Card>
+      <div className="flex flex-col items-center">
+        <Skeleton className="h-14 w-14 rounded-full" />
+        <Skeleton className="mt-4 h-8 w-52" />
+        <Skeleton className="mt-3 h-4 w-64" />
+      </div>
+      <div className="mt-8 space-y-3">
+        <Skeleton className="h-11 w-full" />
+        <Skeleton className="h-11 w-full" />
+      </div>
+    </Card>
+  );
+}
 
 function VerifyEmailContent() {
   const searchParams = useSearchParams();
   const emailParam = searchParams.get('email');
   const [email, setEmail] = useState(emailParam || '');
-  const [message, setMessage] = useState('');
-  const [error, setError] = useState('');
+  const [feedback, setFeedback] = useState<Feedback>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [canResend, setCanResend] = useState(true);
   const [countdown, setCountdown] = useState(0);
-  const tc = useTranslations('common');
+  const t = useTranslations('auth');
+  const te = useTranslations('errors');
 
   // Countdown timer for resend cooldown
   useEffect(() => {
@@ -29,12 +74,11 @@ function VerifyEmailContent() {
 
   const handleResend = async () => {
     if (!email) {
-      setError('Please enter your email address');
+      setFeedback({ tone: 'error', message: t('emailRequired') });
       return;
     }
 
-    setError('');
-    setMessage('');
+    setFeedback(null);
     setIsLoading(true);
     setCanResend(false);
 
@@ -45,19 +89,36 @@ function VerifyEmailContent() {
         body: JSON.stringify({ email }),
       });
 
-      const data = await response.json();
+      const data = await response.json().catch(() => null);
 
       if (!response.ok) {
-        setError(data.error || 'Failed to resend verification email');
+        const raw = data?.error ?? data?.code;
+
+        // Already verified is not a failure — it is a shortcut to signing in.
+        if (
+          typeof raw === 'string' &&
+          raw.toLowerCase().includes('already verified')
+        ) {
+          setFeedback({ tone: 'info', message: t('alreadyVerified') });
+        } else {
+          setFeedback({
+            tone: 'error',
+            message: translateApiError(
+              te,
+              resolveResendError(response.status, raw)
+            ),
+          });
+        }
+
         setCanResend(true);
         setIsLoading(false);
         return;
       }
 
-      setMessage('Verification email sent! Please check your inbox.');
-      setCountdown(60); // 60 second cooldown
+      setFeedback({ tone: 'success', message: t('resendSuccess') });
+      setCountdown(RESEND_COOLDOWN_SECONDS);
     } catch {
-      setError('An error occurred while sending the email');
+      setFeedback({ tone: 'error', message: translateApiError(te, 'SERVER_ERROR') });
       setCanResend(true);
     } finally {
       setIsLoading(false);
@@ -65,122 +126,108 @@ function VerifyEmailContent() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      {/* Header */}
-      <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 py-4">
-        <div className="max-w-7xl mx-auto flex justify-between items-center">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{tc('appName')}</h1>
-          <LanguageSwitcher />
-        </div>
-      </header>
+    <Card>
+      <div className="flex flex-col items-center text-center">
+        <span
+          aria-hidden="true"
+          className="flex h-14 w-14 items-center justify-center rounded-full bg-brand-soft text-brand"
+        >
+          <svg
+            className="h-7 w-7"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.75"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            viewBox="0 0 24 24"
+          >
+            <path d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+          </svg>
+        </span>
 
-      {/* Verification Instructions */}
-      <div className="flex items-center justify-center px-4 py-12">
-        <div className="max-w-md w-full space-y-8 p-8 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700">
-          <div className="text-center">
-            {/* Email Icon */}
-            <div className="mx-auto w-16 h-16 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center mb-4">
-              <svg className="w-8 h-8 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-              </svg>
-            </div>
-            <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">בדוק את האימייל שלך</h2>
-            <p className="text-gray-600 dark:text-gray-400 mb-6">
-              שלחנו קישור לאימות לכתובת:
-            </p>
-            {email && (
-              <p className="text-blue-600 dark:text-blue-400 font-semibold mb-6">
-                {email}
-              </p>
-            )}
-            <p className="text-gray-600 dark:text-gray-400 text-sm">
-              לחץ על הקישור באימייל כדי לאמת את החשבון שלך ולהתחיל להשתמש במערכת.
-            </p>
-          </div>
+        <h1 className="mt-4 font-display text-2xl font-bold tracking-tight text-ink sm:text-3xl">
+          {t('checkYourEmail')}
+        </h1>
+        <p className="mt-2 text-sm text-ink-muted">{t('verificationSentTo')}</p>
+        {email && (
+          <p className="bidi-isolate mt-1 break-all font-semibold text-ink">
+            {email}
+          </p>
+        )}
+        <p className="mt-3 text-sm leading-relaxed text-ink-muted">
+          {t('verificationInstructions')}
+        </p>
+      </div>
 
-          {message && (
-            <div className="bg-green-50 dark:bg-green-900/30 text-green-800 dark:text-green-200 p-3 rounded-lg border border-green-200 dark:border-green-700 text-center">
-              {message}
-            </div>
+      {feedback && (
+        <Alert tone={feedback.tone} className="mt-6">
+          {feedback.message}
+        </Alert>
+      )}
+
+      <div className="mt-7">
+        <SectionRule>{t('didntGetEmail')}</SectionRule>
+
+        <div className="mt-4 space-y-3">
+          {!emailParam && (
+            <Field
+              id="resend-email"
+              name="email"
+              label={t('email')}
+              type="email"
+              autoComplete="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
           )}
 
-          {error && (
-            <div className="bg-red-50 dark:bg-red-900/30 text-red-800 dark:text-red-200 p-3 rounded-lg border border-red-200 dark:border-red-700 text-center">
-              {error}
-            </div>
-          )}
-
-          <div className="space-y-4">
-            {/* Spam Warning */}
-            <div className="bg-yellow-50 dark:bg-yellow-900/30 border-2 border-yellow-200 dark:border-yellow-700 p-4 rounded-lg">
-              <div className="flex items-start gap-3">
-                <svg className="w-6 h-6 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                </svg>
-                <div>
-                  <p className="font-bold text-yellow-800 dark:text-yellow-200 text-sm mb-1">
-                    ⚠️ בדוק את תיקיית הספאם/זבל!
-                  </p>
-                  <p className="text-sm text-yellow-700 dark:text-yellow-300">
-                    האימייל עשוי להגיע לתיקיית הספאם. חפש אימייל מ-onboarding@resend.dev
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Resend Section */}
-            <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
-              <p className="text-center text-sm text-gray-600 dark:text-gray-400 mb-4">
-                לא קיבלת את האימייל?
-              </p>
-
-              {!emailParam && (
-                <div className="mb-4">
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="הכנס את כתובת האימייל שלך"
-                    className="w-full px-4 py-3 bg-white dark:bg-gray-700 border-2 border-gray-400 dark:border-gray-600 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-transparent"
-                  />
-                </div>
-              )}
-
-              <button
-                onClick={handleResend}
-                disabled={isLoading || !canResend}
-                className="w-full py-3 bg-gray-600 hover:bg-gray-700 dark:bg-gray-700 dark:hover:bg-gray-600 text-white rounded-lg font-bold shadow-md transition disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isLoading ? 'שולח...' : canResend ? 'שלח שוב' : `המתן ${countdown} שניות`}
-              </button>
-            </div>
-
-            {/* Tips */}
-            <div className="bg-gray-50 dark:bg-gray-700/50 p-4 rounded-lg">
-              <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-2">טיפים:</p>
-              <ul className="text-sm text-gray-600 dark:text-gray-400 space-y-1 list-disc list-inside">
-                <li>בדוק את תיקיית הספאם או הזבל</li>
-                <li>הקישור תקף ל-24 שעות</li>
-                <li>ודא שהכתובת נכונה</li>
-              </ul>
-            </div>
-
-            {/* Back to Login */}
-            <div className="text-center text-sm border-t border-gray-200 dark:border-gray-700 pt-4">
-              <Link href="/login" className="text-blue-600 dark:text-blue-400 hover:text-blue-500 dark:hover:text-blue-300 font-semibold">
-                חזרה להתחברות
-              </Link>
-            </div>
-          </div>
+          <Button
+            variant="secondary"
+            size="lg"
+            fullWidth
+            onClick={handleResend}
+            disabled={!canResend}
+            pending={isLoading}
+            pendingLabel={t('resending')}
+          >
+            {canResend ? t('resend') : t('resendIn', { seconds: countdown })}
+          </Button>
         </div>
       </div>
-    </div>
+
+      <div className="mt-7">
+        <SectionRule>{t('tips')}</SectionRule>
+        <ul className="mt-3 space-y-1.5 text-sm text-ink-muted">
+          <li className="flex gap-2">
+            <span aria-hidden="true" className="mt-2 h-1 w-1 shrink-0 rounded-full bg-ink-faint" />
+            <span>{t('tipSpam')}</span>
+          </li>
+          <li className="flex gap-2">
+            <span aria-hidden="true" className="mt-2 h-1 w-1 shrink-0 rounded-full bg-ink-faint" />
+            <span>{t('tipLinkExpiry')}</span>
+          </li>
+          <li className="flex gap-2">
+            <span aria-hidden="true" className="mt-2 h-1 w-1 shrink-0 rounded-full bg-ink-faint" />
+            <span>{t('tipCheckAddress')}</span>
+          </li>
+        </ul>
+      </div>
+
+      <p className="mt-7 text-center text-sm">
+        <Link
+          href="/login"
+          className="font-semibold text-brand hover:text-brand-hover"
+        >
+          {t('backToLogin')}
+        </Link>
+      </p>
+    </Card>
   );
 }
 
 export default function VerifyEmailPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-gray-50 dark:bg-gray-900" />}>
+    <Suspense fallback={<VerifyEmailSkeleton />}>
       <VerifyEmailContent />
     </Suspense>
   );
