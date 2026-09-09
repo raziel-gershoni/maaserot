@@ -3,12 +3,13 @@ import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { getCurrentMonth } from '@/lib/calculations';
 import { sendIncomeReminder } from '@/lib/telegramNotify';
+import { apiError } from '../../_lib/apiError';
 
 export async function POST() {
   try {
     const session = await auth();
     if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return apiError('UNAUTHORIZED', 401);
     }
 
     const userId = session.user.id;
@@ -26,14 +27,15 @@ export async function POST() {
     });
 
     if (!partnership) {
-      return NextResponse.json({ error: 'No active partnership' }, { status: 400 });
+      return apiError('PARTNERSHIP_NOT_FOUND', 400);
     }
 
     const sender = partnership.user1Id === userId ? partnership.user1 : partnership.user2;
     const partner = partnership.user1Id === userId ? partnership.user2 : partnership.user1;
 
     if (!partner.telegramId) {
-      return NextResponse.json({ error: 'Partner not connected to Telegram' }, { status: 400 });
+      // No PARTNER_NOT_ON_TELEGRAM code exists yet.
+      return apiError('VALIDATION_FAILED', 400);
     }
 
     const month = getCurrentMonth();
@@ -46,12 +48,12 @@ export async function POST() {
     );
 
     if (!sent) {
-      return NextResponse.json({ error: 'Failed to send reminder' }, { status: 500 });
+      return apiError('SERVER_ERROR', 500);
     }
 
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Remind API error:', error);
-    return NextResponse.json({ error: 'Failed to send reminder' }, { status: 500 });
+    return apiError('SERVER_ERROR', 500);
   }
 }

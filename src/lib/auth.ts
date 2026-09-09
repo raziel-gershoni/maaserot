@@ -1,9 +1,28 @@
-import NextAuth from 'next-auth';
+import NextAuth, { CredentialsSignin } from 'next-auth';
 import Credentials from 'next-auth/providers/credentials';
 import { compare } from 'bcryptjs';
 import { prisma } from './prisma';
 import { logAuthEvent } from './authLogger';
 import { validateInitData, findOrCreateTelegramUser } from './telegram';
+import type { ErrorCode } from './errorCodes';
+
+/**
+ * The one way `authorize` reports a rejected sign-in.
+ *
+ * next-auth only forwards a reason to the browser when the thrown error is a
+ * `CredentialsSignin` — anything else is flattened to `Configuration`, which
+ * is how a locked account used to reach the login screen as "wrong password".
+ * Auth.js copies `code` verbatim into the redirect URL, so this puts a stable
+ * `ErrorCode` there and the login screen translates it.
+ *
+ * The client sees `error: 'CredentialsSignin'` plus `code: '<ERROR_CODE>'`.
+ */
+class AuthCodeError extends CredentialsSignin {
+  constructor(code: ErrorCode) {
+    super(code);
+    this.code = code;
+  }
+}
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   pages: {
@@ -21,7 +40,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) {
-          throw new Error('Email and password are required');
+          throw new AuthCodeError('VALIDATION_FAILED');
         }
 
         const user = await prisma.user.findUnique({
@@ -40,7 +59,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         });
 
         if (!user || !user.passwordHash) {
-          throw new Error('Invalid email or password');
+          // Never distinguish an unknown address from a wrong password.
+          throw new AuthCodeError('INVALID_CREDENTIALS');
         }
 
         // Check if account is locked
@@ -53,7 +73,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             userId: user.id,
             metadata: { minutesRemaining },
           });
-          return null;
+          // Was `return null`, which reached the browser as a generic
+          // credentials failure. The lock is already disclosed by
+          // /api/auth/check-status, so naming it here changes nothing but the
+          // message the person gets.
+          throw new AuthCodeError('ACCOUNT_LOCKED');
         }
 
         const isPasswordValid = await compare(
@@ -94,17 +118,22 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             },
           });
 
-          throw new Error('Invalid email or password');
+          throw new AuthCodeError('INVALID_CREDENTIALS');
         }
 
-        // TODO: Re-enable email verification check once Resend domain is verified
+        // TODO: Re-enable email verification check once Resend domain is
+        // verified. Left disabled deliberately: no verification mail is sent
+        // today, so enforcing it would lock every existing account out. When
+        // it comes back it throws EMAIL_NOT_VERIFIED, which the login screen
+        // already answers with a "resend verification" action. Until then that
+        // case reaches the screen through /api/auth/check-status.
         // if (!user.emailVerified) {
         //   await logAuthEvent({
         //     event: 'login_blocked_unverified',
         //     email: user.email,
         //     userId: user.id,
         //   });
-        //   return null;
+        //   throw new AuthCodeError('EMAIL_NOT_VERIFIED');
         // }
 
         // Reset failed login attempts on successful login
@@ -139,9 +168,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       },
       async authorize(credentials) {
         if (!credentials?.initData) {
-          throw new Error('Missing Telegram initData');
+          throw new AuthCodeError('VALIDATION_FAILED');
         }
 
+        // A missing bot token is a deployment fault, not a rejected sign-in,
+        // so it stays a plain error: next-auth reports it as `Configuration`
+        // and logs it loudly on the server.
         const botToken = process.env.TELEGRAM_BOT_TOKEN;
         if (!botToken) {
           throw new Error('Telegram bot token not configured');
@@ -149,7 +181,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         const telegramUser = validateInitData(credentials.initData as string, botToken);
         if (!telegramUser) {
-          throw new Error('Invalid Telegram authentication');
+          throw new AuthCodeError('INVALID_CREDENTIALS');
         }
 
         const user = await findOrCreateTelegramUser(telegramUser);

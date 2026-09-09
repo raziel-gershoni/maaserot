@@ -2,6 +2,16 @@ import { NextRequest, NextResponse } from 'next/server';
 import { encode } from 'next-auth/jwt';
 import { validateTelegramIdToken, findOrCreateTelegramUser } from '@/lib/telegram';
 import { logAuthEvent } from '@/lib/authLogger';
+import type { ErrorCode } from '@/lib/errorCodes';
+
+/**
+ * The login screen resolves `?error=` through the shared code contract, so
+ * every bail-out here redirects with a stable code instead of the ad-hoc
+ * slugs (`config`, `missing_params`, `invalid_state`…) it could not translate.
+ */
+function loginRedirect(appUrl: string, code: ErrorCode) {
+  return NextResponse.redirect(`${appUrl}/he/login?error=${code}`);
+}
 
 export async function GET(request: NextRequest) {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || '';
@@ -10,7 +20,7 @@ export async function GET(request: NextRequest) {
   const nextAuthSecret = process.env.NEXTAUTH_SECRET;
 
   if (!clientId || !clientSecret || !nextAuthSecret) {
-    return NextResponse.redirect(`${appUrl}/he/login?error=config`);
+    return loginRedirect(appUrl, 'SERVER_ERROR');
   }
 
   const { searchParams } = new URL(request.url);
@@ -18,7 +28,7 @@ export async function GET(request: NextRequest) {
   const state = searchParams.get('state');
 
   if (!code || !state) {
-    return NextResponse.redirect(`${appUrl}/he/login?error=missing_params`);
+    return loginRedirect(appUrl, 'VALIDATION_FAILED');
   }
 
   // Validate state against cookie
@@ -26,7 +36,7 @@ export async function GET(request: NextRequest) {
   const codeVerifier = request.cookies.get('tg_oauth_verifier')?.value;
 
   if (!storedState || !codeVerifier || state !== storedState) {
-    return NextResponse.redirect(`${appUrl}/he/login?error=invalid_state`);
+    return loginRedirect(appUrl, 'VALIDATION_FAILED');
   }
 
   try {
@@ -50,14 +60,14 @@ export async function GET(request: NextRequest) {
 
     if (!tokenResponse.ok) {
       console.error('Telegram token exchange failed:', await tokenResponse.text());
-      return NextResponse.redirect(`${appUrl}/he/login?error=token_exchange`);
+      return loginRedirect(appUrl, 'INVALID_CREDENTIALS');
     }
 
     const tokens = await tokenResponse.json();
     const idToken = tokens.id_token;
 
     if (!idToken) {
-      return NextResponse.redirect(`${appUrl}/he/login?error=no_id_token`);
+      return loginRedirect(appUrl, 'INVALID_CREDENTIALS');
     }
 
     // Validate id_token JWT via JWKS
@@ -66,7 +76,7 @@ export async function GET(request: NextRequest) {
     // Use payload.id (Telegram user ID), NOT payload.sub (opaque)
     const telegramId = Number(payload.id);
     if (!telegramId || isNaN(telegramId)) {
-      return NextResponse.redirect(`${appUrl}/he/login?error=invalid_id`);
+      return loginRedirect(appUrl, 'INVALID_CREDENTIALS');
     }
 
     // Extract user info from id_token claims
@@ -122,6 +132,6 @@ export async function GET(request: NextRequest) {
     return response;
   } catch (error) {
     console.error('Telegram OAuth callback error:', error);
-    return NextResponse.redirect(`${appUrl}/he/login?error=callback_failed`);
+    return loginRedirect(appUrl, 'SERVER_ERROR');
   }
 }

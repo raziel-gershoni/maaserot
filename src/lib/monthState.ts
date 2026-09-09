@@ -143,7 +143,7 @@ export async function calculateGroupMonthStatesInBatch(userId: string, months: s
 
   // Phase 2: Fetch partner data in bulk if needed (2 parallel queries)
   let partnerIncomes: typeof allIncomes = [];
-  let partnerFixedCharitiesMap = new Map<string, number>();
+  const partnerFixedCharitiesMap = new Map<string, number>();
   if (partnerIds.size > 0) {
     const partnerIdArray = [...partnerIds];
     const [pIncomes, pCharities] = await Promise.all([

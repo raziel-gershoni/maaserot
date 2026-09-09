@@ -1,12 +1,13 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { apiError } from '../_lib/apiError';
 
 export async function GET() {
   try {
     const session = await auth();
     if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return apiError('UNAUTHORIZED', 401);
     }
 
     const charities = await prisma.fixedCharity.findMany({
@@ -17,10 +18,7 @@ export async function GET() {
     return NextResponse.json({ charities });
   } catch (error) {
     console.error('Error fetching charities:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch charities' },
-      { status: 500 }
-    );
+    return apiError('SERVER_ERROR', 500);
   }
 }
 
@@ -28,16 +26,13 @@ export async function POST(request: Request) {
   try {
     const session = await auth();
     if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return apiError('UNAUTHORIZED', 401);
     }
 
     const { name, amount } = await request.json();
 
     if (!name || !amount) {
-      return NextResponse.json(
-        { error: 'Name and amount are required' },
-        { status: 400 }
-      );
+      return apiError('VALIDATION_FAILED', 400);
     }
 
     const charity = await prisma.fixedCharity.create({
@@ -52,10 +47,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ charity }, { status: 201 });
   } catch (error) {
     console.error('Error creating charity:', error);
-    return NextResponse.json(
-      { error: 'Failed to create charity' },
-      { status: 500 }
-    );
+    return apiError('SERVER_ERROR', 500);
   }
 }
 
@@ -63,13 +55,13 @@ export async function PATCH(request: Request) {
   try {
     const session = await auth();
     if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return apiError('UNAUTHORIZED', 401);
     }
 
     const { id, isActive, name, amount } = await request.json();
 
     if (!id) {
-      return NextResponse.json({ error: 'ID is required' }, { status: 400 });
+      return apiError('VALIDATION_FAILED', 400);
     }
 
     const charity = await prisma.fixedCharity.updateMany({
@@ -82,16 +74,13 @@ export async function PATCH(request: Request) {
     });
 
     if (charity.count === 0) {
-      return NextResponse.json({ error: 'Charity not found' }, { status: 404 });
+      return apiError('CHARITY_NOT_FOUND', 404);
     }
 
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Error updating charity:', error);
-    return NextResponse.json(
-      { error: 'Failed to update charity' },
-      { status: 500 }
-    );
+    return apiError('SERVER_ERROR', 500);
   }
 }
 
@@ -99,14 +88,14 @@ export async function DELETE(request: Request) {
   try {
     const session = await auth();
     if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return apiError('UNAUTHORIZED', 401);
     }
 
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
 
     if (!id) {
-      return NextResponse.json({ error: 'ID is required' }, { status: 400 });
+      return apiError('VALIDATION_FAILED', 400);
     }
 
     await prisma.fixedCharity.deleteMany({
@@ -116,9 +105,6 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Error deleting charity:', error);
-    return NextResponse.json(
-      { error: 'Failed to delete charity' },
-      { status: 500 }
-    );
+    return apiError('SERVER_ERROR', 500);
   }
 }

@@ -2,29 +2,30 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { calculateCurrentMonthState } from '@/lib/monthState';
+import { apiError } from '../../_lib/apiError';
 
 export async function POST(request: Request) {
   try {
     const session = await auth();
 
     if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return apiError('UNAUTHORIZED', 401);
     }
 
     const { month, memberIds, paymentAmount } = await request.json();
 
     if (!month || !memberIds || !Array.isArray(memberIds) || memberIds.length === 0) {
-      return NextResponse.json(
-        { error: 'Invalid request: month and memberIds are required' },
-        { status: 400 }
-      );
+      return apiError('VALIDATION_FAILED', 400);
     }
 
-    if (paymentAmount === undefined || paymentAmount === null || paymentAmount <= 0) {
-      return NextResponse.json(
-        { error: 'Invalid payment amount' },
-        { status: 400 }
-      );
+    if (paymentAmount === undefined || paymentAmount === null) {
+      return apiError('VALIDATION_FAILED', 400);
+    }
+
+    // Same requests rejected as before, split so a zero or negative amount
+    // reads as "there is nothing to pay" rather than a malformed request.
+    if (paymentAmount <= 0) {
+      return apiError('NOTHING_TO_PAY', 400);
     }
 
     // Calculate totals for all members
@@ -90,10 +91,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: true, snapshot });
   } catch (error) {
     console.error('Payment error:', error);
-    return NextResponse.json(
-      { error: 'Failed to process payment' },
-      { status: 500 }
-    );
+    return apiError('SERVER_ERROR', 500);
   }
 }
 
@@ -102,14 +100,14 @@ export async function DELETE(request: Request) {
     const session = await auth();
 
     if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return apiError('UNAUTHORIZED', 401);
     }
 
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
 
     if (!id) {
-      return NextResponse.json({ error: 'Missing payment id' }, { status: 400 });
+      return apiError('VALIDATION_FAILED', 400);
     }
 
     // Verify user is a member of this payment
@@ -118,7 +116,9 @@ export async function DELETE(request: Request) {
     });
 
     if (!member) {
-      return NextResponse.json({ error: 'Payment not found' }, { status: 404 });
+      // No PAYMENT_NOT_FOUND code exists yet; the generic code keeps the 404
+      // from leaking English prose.
+      return apiError('VALIDATION_FAILED', 404);
     }
 
     // Delete snapshot (GroupPaymentMember cascades automatically)
@@ -129,9 +129,6 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Delete payment error:', error);
-    return NextResponse.json(
-      { error: 'Failed to delete payment' },
-      { status: 500 }
-    );
+    return apiError('SERVER_ERROR', 500);
   }
 }

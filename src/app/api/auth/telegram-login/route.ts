@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import crypto from 'crypto';
+import { apiError } from '../../_lib/apiError';
 
 function base64url(buffer: Buffer): string {
   return buffer.toString('base64url');
@@ -10,10 +11,7 @@ export async function GET() {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL;
 
   if (!clientId || !appUrl) {
-    return NextResponse.json(
-      { error: 'Telegram OAuth not configured' },
-      { status: 500 }
-    );
+    return apiError('SERVER_ERROR', 500);
   }
 
   // Generate state (32 bytes hex)

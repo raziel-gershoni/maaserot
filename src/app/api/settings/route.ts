@@ -2,13 +2,14 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { getCurrentMonth } from '@/lib/calculations';
+import { apiError } from '../_lib/apiError';
 
 export async function GET() {
   try {
     const session = await auth();
 
     if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return apiError('UNAUTHORIZED', 401);
     }
 
     const user = await prisma.user.findUnique({
@@ -22,7 +23,7 @@ export async function GET() {
     });
 
     if (!user) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+      return apiError('USER_NOT_FOUND', 404);
     }
 
     return NextResponse.json({
@@ -36,7 +37,7 @@ export async function GET() {
     });
   } catch (error) {
     console.error('Settings fetch error:', error);
-    return NextResponse.json({ error: 'Failed to fetch settings' }, { status: 500 });
+    return apiError('SERVER_ERROR', 500);
   }
 }
 
@@ -45,7 +46,7 @@ export async function PATCH(request: Request) {
     const session = await auth();
 
     if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return apiError('UNAUTHORIZED', 401);
     }
 
     const body = await request.json();
@@ -53,17 +54,11 @@ export async function PATCH(request: Request) {
 
     // Validate inputs
     if (defaultPercent && (defaultPercent < 1 || defaultPercent > 100)) {
-      return NextResponse.json(
-        { error: 'Default percentage must be between 1 and 100' },
-        { status: 400 }
-      );
+      return apiError('VALIDATION_FAILED', 400);
     }
 
     if (locale && !['he', 'en'].includes(locale)) {
-      return NextResponse.json(
-        { error: 'Invalid locale' },
-        { status: 400 }
-      );
+      return apiError('VALIDATION_FAILED', 400);
     }
 
     // Update user settings
@@ -119,6 +114,6 @@ export async function PATCH(request: Request) {
     });
   } catch (error) {
     console.error('Settings update error:', error);
-    return NextResponse.json({ error: 'Failed to update settings' }, { status: 500 });
+    return apiError('SERVER_ERROR', 500);
   }
 }

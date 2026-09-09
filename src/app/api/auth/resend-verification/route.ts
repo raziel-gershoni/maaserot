@@ -5,6 +5,7 @@ import { checkRateLimit, resetRateLimit, RATE_LIMITS } from '@/lib/rateLimit';
 import { logAuthEventFromRequest } from '@/lib/authLogger';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
+import { apiError } from '../../_lib/apiError';
 
 const resendSchema = z.object({
   email: z.string().email('Invalid email format'),
@@ -22,13 +23,9 @@ export async function POST(request: Request) {
     const validation = resendSchema.safeParse(body);
 
     if (!validation.success) {
-      return NextResponse.json(
-        {
-          error: 'Validation failed',
-          details: validation.error.format(),
-        },
-        { status: 400 }
-      );
+      return apiError('VALIDATION_FAILED', 400, {
+        details: validation.error.format(),
+      });
     }
 
     const { email } = validation.data;
@@ -37,22 +34,27 @@ export async function POST(request: Request) {
     const rateLimit = checkRateLimit(email, 'resend-verification', RATE_LIMITS.EMAIL_VERIFICATION);
 
     if (!rateLimit.success) {
-      return NextResponse.json(
-        {
-          error: 'Too many verification requests. Please try again later.',
-          resetAt: new Date(rateLimit.resetAt).toISOString(),
-        },
-        { status: 429 }
-      );
+      return apiError('RATE_LIMITED', 429, {
+        resetAt: new Date(rateLimit.resetAt).toISOString(),
+      });
     }
 
     // Generate new token
     const result = await resendVerificationToken(email);
 
     if (!result.success) {
-      return NextResponse.json(
-        { error: result.error || 'Failed to resend verification email' },
-        { status: 400 }
+      // `resendVerificationToken` still answers in prose. An unknown address
+      // and an already-verified one are the only two outcomes, and neither has
+      // a code of its own yet, so `reason` carries the distinction the
+      // verify-email screen needs to offer "just sign in" instead of an error.
+      const alreadyVerified = (result.error ?? '')
+        .toLowerCase()
+        .includes('already verified');
+
+      return apiError(
+        alreadyVerified ? 'VALIDATION_FAILED' : 'USER_NOT_FOUND',
+        400,
+        alreadyVerified ? { reason: 'already_verified' } : undefined
       );
     }
 
@@ -66,10 +68,7 @@ export async function POST(request: Request) {
     const emailSent = await sendVerificationEmail(email, result.token!, user?.locale || 'he');
 
     if (!emailSent) {
-      return NextResponse.json(
-        { error: 'Failed to send verification email. Please try again later.' },
-        { status: 500 }
-      );
+      return apiError('SERVER_ERROR', 500);
     }
 
     // Log resend event
@@ -86,9 +85,6 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     console.error('Resend verification error:', error);
-    return NextResponse.json(
-      { error: 'Failed to resend verification email' },
-      { status: 500 }
-    );
+    return apiError('SERVER_ERROR', 500);
   }
 }

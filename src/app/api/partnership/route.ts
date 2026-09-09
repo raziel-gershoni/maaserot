@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { apiError } from '../_lib/apiError';
 
 // GET - Fetch current partnership and invitations
 export async function GET() {
@@ -8,7 +9,7 @@ export async function GET() {
     const session = await auth();
 
     if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return apiError('UNAUTHORIZED', 401);
     }
 
     const userId = session.user.id;
@@ -87,7 +88,7 @@ export async function GET() {
     });
   } catch (error) {
     console.error('Partnership fetch error:', error);
-    return NextResponse.json({ error: 'Failed to fetch partnerships' }, { status: 500 });
+    return apiError('SERVER_ERROR', 500);
   }
 }
 
@@ -97,20 +98,20 @@ export async function POST(request: Request) {
     const session = await auth();
 
     if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return apiError('UNAUTHORIZED', 401);
     }
 
     const { partnerEmail } = await request.json();
 
     if (!partnerEmail) {
-      return NextResponse.json({ error: 'Partner email is required' }, { status: 400 });
+      return apiError('VALIDATION_FAILED', 400);
     }
 
     const userId = session.user.id;
 
     // Check if inviting self
     if (partnerEmail === session.user.email) {
-      return NextResponse.json({ error: 'Cannot invite yourself' }, { status: 400 });
+      return apiError('CANNOT_INVITE_SELF', 400);
     }
 
     // Find partner by email
@@ -119,7 +120,7 @@ export async function POST(request: Request) {
     });
 
     if (!partner) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+      return apiError('USER_NOT_FOUND', 404);
     }
 
     // Check if current user already has an active partnership
@@ -134,7 +135,7 @@ export async function POST(request: Request) {
     });
 
     if (myPartnership) {
-      return NextResponse.json({ error: 'You already have an active partnership' }, { status: 400 });
+      return apiError('ALREADY_HAS_PARTNERSHIP', 400);
     }
 
     // Check if partner already has an active partnership
@@ -149,7 +150,9 @@ export async function POST(request: Request) {
     });
 
     if (partnerPartnership) {
-      return NextResponse.json({ error: 'This user is already in a partnership' }, { status: 400 });
+      // No PARTNER_ALREADY_HAS_PARTNERSHIP code exists yet, so the shared
+      // "already partnered" code carries this case too.
+      return apiError('ALREADY_HAS_PARTNERSHIP', 400);
     }
 
     // Check for existing pending invitation between these users
@@ -164,7 +167,7 @@ export async function POST(request: Request) {
     });
 
     if (existingInvitation) {
-      return NextResponse.json({ error: 'Invitation already exists' }, { status: 400 });
+      return apiError('ALREADY_HAS_PARTNERSHIP', 400);
     }
 
     // Create partnership invitation
@@ -196,7 +199,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ partnership }, { status: 201 });
   } catch (error) {
     console.error('Partnership creation error:', error);
-    return NextResponse.json({ error: 'Failed to create partnership' }, { status: 500 });
+    return apiError('SERVER_ERROR', 500);
   }
 }
 
@@ -206,17 +209,17 @@ export async function PATCH(request: Request) {
     const session = await auth();
 
     if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return apiError('UNAUTHORIZED', 401);
     }
 
     const { partnershipId, action } = await request.json();
 
     if (!partnershipId || !action) {
-      return NextResponse.json({ error: 'Partnership ID and action are required' }, { status: 400 });
+      return apiError('VALIDATION_FAILED', 400);
     }
 
     if (action !== 'accept' && action !== 'decline') {
-      return NextResponse.json({ error: 'Action must be "accept" or "decline"' }, { status: 400 });
+      return apiError('VALIDATION_FAILED', 400);
     }
 
     const userId = session.user.id;
@@ -227,17 +230,18 @@ export async function PATCH(request: Request) {
     });
 
     if (!partnership) {
-      return NextResponse.json({ error: 'Partnership not found' }, { status: 404 });
+      return apiError('PARTNERSHIP_NOT_FOUND', 404);
     }
 
     // Verify user is the recipient (user2)
     if (partnership.user2Id !== userId) {
-      return NextResponse.json({ error: 'Only the recipient can accept or decline' }, { status: 403 });
+      return apiError('UNAUTHORIZED', 403);
     }
 
     // Verify partnership is pending
     if (partnership.status !== 'PENDING') {
-      return NextResponse.json({ error: 'Partnership is not pending' }, { status: 400 });
+      // The invitation was already accepted, declined or withdrawn.
+      return apiError('PARTNERSHIP_NOT_FOUND', 400);
     }
 
     if (action === 'decline') {
@@ -281,7 +285,7 @@ export async function PATCH(request: Request) {
     });
 
     if (existingPartnership) {
-      return NextResponse.json({ error: 'One of the users is already in a partnership' }, { status: 400 });
+      return apiError('ALREADY_HAS_PARTNERSHIP', 400);
     }
 
     // Accept the partnership
@@ -309,7 +313,7 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ partnership: updated });
   } catch (error) {
     console.error('Partnership update error:', error);
-    return NextResponse.json({ error: 'Failed to update partnership' }, { status: 500 });
+    return apiError('SERVER_ERROR', 500);
   }
 }
 
@@ -319,14 +323,14 @@ export async function DELETE(request: Request) {
     const session = await auth();
 
     if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return apiError('UNAUTHORIZED', 401);
     }
 
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
 
     if (!id) {
-      return NextResponse.json({ error: 'Partnership ID is required' }, { status: 400 });
+      return apiError('VALIDATION_FAILED', 400);
     }
 
     const userId = session.user.id;
@@ -337,12 +341,12 @@ export async function DELETE(request: Request) {
     });
 
     if (!partnership) {
-      return NextResponse.json({ error: 'Partnership not found' }, { status: 404 });
+      return apiError('PARTNERSHIP_NOT_FOUND', 404);
     }
 
     // Verify user is part of the partnership
     if (partnership.user1Id !== userId && partnership.user2Id !== userId) {
-      return NextResponse.json({ error: 'You are not part of this partnership' }, { status: 403 });
+      return apiError('UNAUTHORIZED', 403);
     }
 
     // Delete the partnership
@@ -353,6 +357,6 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Partnership deletion error:', error);
-    return NextResponse.json({ error: 'Failed to delete partnership' }, { status: 500 });
+    return apiError('SERVER_ERROR', 500);
   }
 }

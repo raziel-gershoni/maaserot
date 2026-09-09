@@ -8,6 +8,7 @@ import { getClientIp } from '@/lib/utils/ip';
 // import { generateVerificationToken } from '@/lib/tokens';
 // import { sendVerificationEmail } from '@/lib/email';
 import { logAuthEventFromRequest } from '@/lib/authLogger';
+import { apiError } from '../../_lib/apiError';
 
 export async function POST(request: Request) {
   try {
@@ -16,13 +17,9 @@ export async function POST(request: Request) {
     const rateLimit = checkRateLimit(ip, 'register', RATE_LIMITS.REGISTER);
 
     if (!rateLimit.success) {
-      return NextResponse.json(
-        {
-          error: 'Too many registration attempts. Please try again later.',
-          resetAt: new Date(rateLimit.resetAt).toISOString(),
-        },
-        { status: 429 }
-      );
+      return apiError('RATE_LIMITED', 429, {
+        resetAt: new Date(rateLimit.resetAt).toISOString(),
+      });
     }
 
     const body = await request.json();
@@ -31,13 +28,17 @@ export async function POST(request: Request) {
     const validation = registerSchema.safeParse(body);
 
     if (!validation.success) {
-      return NextResponse.json(
-        {
-          error: 'Validation failed',
-          details: validation.error.format()
-        },
-        { status: 400 }
+      // A too-short password is the one validation failure a person can act
+      // on directly, so it gets its own code. `details` is unchanged.
+      // Only when the password is the sole complaint — otherwise a bad email
+      // would be reported as a weak password.
+      const weakPassword = validation.error.issues.every(
+        (issue) => issue.path[0] === 'password'
       );
+
+      return apiError(weakPassword ? 'WEAK_PASSWORD' : 'VALIDATION_FAILED', 400, {
+        details: validation.error.format(),
+      });
     }
 
     const { name, email, password } = validation.data;
@@ -48,10 +49,7 @@ export async function POST(request: Request) {
     });
 
     if (existingUser) {
-      return NextResponse.json(
-        { error: 'User already exists' },
-        { status: 400 }
-      );
+      return apiError('EMAIL_TAKEN', 400);
     }
 
     // Hash password
@@ -85,9 +83,6 @@ export async function POST(request: Request) {
     );
   } catch (error) {
     console.error('Registration error:', error);
-    return NextResponse.json(
-      { error: 'Something went wrong' },
-      { status: 500 }
-    );
+    return apiError('SERVER_ERROR', 500);
   }
 }
