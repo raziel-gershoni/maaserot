@@ -111,8 +111,8 @@ export async function calculateGroupMonthState(userId: string, month: string) {
 export async function calculateGroupMonthStatesInBatch(userId: string, months: string[]) {
   if (months.length === 0) return [];
 
-  // Phase 1: Fetch all user data across all months in 3 parallel queries
-  const [allIncomes, allSnapshots, fixedCharities] = await Promise.all([
+  // Phase 1: Fetch all user data across all months in 4 parallel queries
+  const [allIncomes, allSnapshots, fixedCharities, partnership] = await Promise.all([
     prisma.income.findMany({
       where: { userId, month: { in: months } },
     }),
@@ -127,12 +127,32 @@ export async function calculateGroupMonthStatesInBatch(userId: string, months: s
     prisma.fixedCharity.findMany({
       where: { userId, isActive: true },
     }),
+    // The standing partnership, not just whoever appears in past payments.
+    // Deriving the group from snapshots alone meant a month with a partner but
+    // no group payment yet was reckoned solo — so history showed only this
+    // user's debt while the dashboard, which reads the partnership, showed the
+    // couple's.
+    prisma.partnership.findFirst({
+      where: {
+        status: 'ACCEPTED',
+        OR: [{ user1Id: userId }, { user2Id: userId }],
+      },
+      select: { user1Id: true, user2Id: true },
+    }),
   ]);
 
   const fixedCharitiesTotal = fixedCharities.reduce((sum, c) => sum + c.amount, 0);
 
-  // Discover all partner IDs from group snapshots
+  const currentPartnerId = partnership
+    ? partnership.user1Id === userId
+      ? partnership.user2Id
+      : partnership.user1Id
+    : null;
+
+  // Everyone whose data we may need: the standing partner, plus anyone this
+  // user has previously settled a month with (who may no longer be a partner).
   const partnerIds = new Set<string>();
+  if (currentPartnerId) partnerIds.add(currentPartnerId);
   for (const snapshot of allSnapshots) {
     if (snapshot.members.length > 1) {
       for (const member of snapshot.members) {
@@ -183,10 +203,27 @@ export async function calculateGroupMonthStatesInBatch(userId: string, months: s
     const userTotalMaaser = userIncomes.reduce((sum, i) => sum + i.maaser, 0);
     const totalPaid = monthSnapshots.reduce((sum, s) => sum + s.groupAmountPaid, 0);
 
-    // Check if any snapshots have group members
-    const hasGroupSnapshots = monthSnapshots.some(s => s.members.length > 1);
+    // Who is reckoned together this month?
+    //
+    // A month already settled as a group is defined by that payment's members:
+    // it is historical fact, and it stays correct after a partnership ends.
+    // Any other month follows the standing partnership, which is what the
+    // dashboard shows for the same month.
+    const settledWith = new Set<string>();
+    for (const snapshot of monthSnapshots) {
+      if (snapshot.members.length > 1) {
+        for (const member of snapshot.members) settledWith.add(member.userId);
+      }
+    }
 
-    if (!hasGroupSnapshots) {
+    const memberIdsInMonth =
+      settledWith.size > 0
+        ? new Set<string>([userId, ...settledWith])
+        : new Set<string>(
+            currentPartnerId ? [userId, currentPartnerId] : [userId]
+          );
+
+    if (memberIdsInMonth.size === 1) {
       // Solo-only month
       const unpaid = Math.max(0, userTotalMaaser - fixedCharitiesTotal - totalPaid);
       return {
@@ -200,16 +237,6 @@ export async function calculateGroupMonthStatesInBatch(userId: string, months: s
       };
     }
 
-    // Group month - collect all member IDs from snapshots
-    const memberIdsInMonth = new Set<string>([userId]);
-    for (const snapshot of monthSnapshots) {
-      if (snapshot.members.length > 1) {
-        for (const member of snapshot.members) {
-          memberIdsInMonth.add(member.userId);
-        }
-      }
-    }
-
     // Sum maaser and fixed charities across all members
     let totalMaaser = userTotalMaaser;
     let totalFixedCharities = fixedCharitiesTotal;
@@ -220,16 +247,18 @@ export async function calculateGroupMonthStatesInBatch(userId: string, months: s
       totalFixedCharities += partnerFixedCharitiesMap.get(partnerId) || 0;
     }
 
-    // Filter to exact-composition group snapshots
-    const sortedMemberIds = [...memberIdsInMonth].sort();
-    const exactGroupSnapshots = monthSnapshots.filter(snapshot => {
-      const snapshotMemberIds = snapshot.members.map(m => m.userId).sort();
-      return JSON.stringify(snapshotMemberIds) === JSON.stringify(sortedMemberIds);
-    });
-
+    // Money given by anyone in this group counts against the shared
+    // obligation, so a payment counts when its members are all part of the
+    // group — a solo payment by one member included. Requiring an exact
+    // composition match dropped those, reporting nothing paid for a month that
+    // had been partly settled. A payment involving someone outside the group
+    // belongs to a different reckoning and is left out.
     let groupPaid = 0;
-    for (const snapshot of exactGroupSnapshots) {
-      groupPaid += snapshot.groupAmountPaid;
+    for (const snapshot of monthSnapshots) {
+      const belongsToGroup = snapshot.members.every(m =>
+        memberIdsInMonth.has(m.userId)
+      );
+      if (belongsToGroup) groupPaid += snapshot.groupAmountPaid;
     }
 
     const groupUnpaid = Math.max(0, totalMaaser - totalFixedCharities - groupPaid);
