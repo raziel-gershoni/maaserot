@@ -1,57 +1,500 @@
 @import "tailwindcss";
 
-/* Maaserot – Color Scheme */
-:root {
-  /* Backgrounds */
-  --bg: #FFF7F2;              /* warm off-white */
-  --surface: #FFFFFF;         /* cards / panels */
-  --surface-muted: #F6ECE7;   /* subtle separators */
+/* ============================================================================
+   Maaserot design tokens
+   ----------------------------------------------------------------------------
+   Two layers:
+     1. Static ramps in @theme        -> bg-clay-500, text-sand-700, ...
+     2. Semantic aliases in @theme inline, backed by :root custom properties
+        that flip under prefers-color-scheme -> bg-surface, text-ink, ...
 
-  /* Text */
-  --text-primary: #3A2A25;    /* warm charcoal */
-  --text-secondary: #6F5A52;
-  --text-disabled: #A9968F;
+   Screens should use the SEMANTIC layer almost exclusively. Because those
+   utilities inline a var() that the media query redefines, they are correct in
+   both themes with no `dark:` variant. Reach for a raw ramp step only when a
+   one-off tint genuinely has no semantic meaning.
+   ========================================================================== */
 
-  /* Brand */
-  --primary: #D47A5C;         /* orange-coral */
-  --primary-hover: #C96A4F;
-  --secondary: #8E4B7C;       /* soft purple */
+@theme {
+  /* -- Clay: the brand. Anchored on #D47A5C, the shipped theme-color. ------ */
+  --color-clay-50: #fdf3ef;
+  --color-clay-100: #fae4da;
+  --color-clay-200: #f4c8b6;
+  --color-clay-300: #eda98f;
+  --color-clay-400: #e29175;
+  --color-clay-500: #d47a5c;
+  --color-clay-600: #c96a4f;
+  --color-clay-700: #a5533c;
+  --color-clay-800: #82412f;
+  --color-clay-900: #613126;
+  --color-clay-950: #3d1e17;
 
-  /* Semantic */
-  --success: #4E9F7D;         /* muted green */
-  --warning: #E6A23C;         /* amber */
-  --error: #C94A4A;           /* soft red */
+  /* -- Plum: secondary. Group / partnership actions. ---------------------- */
+  --color-plum-50: #f8f0f6;
+  --color-plum-100: #f0deeb;
+  --color-plum-200: #e0bdd7;
+  --color-plum-300: #cc9ac0;
+  --color-plum-400: #b173a0;
+  --color-plum-500: #8e4b7c;
+  --color-plum-600: #7a3f6a;
+  --color-plum-700: #633355;
+  --color-plum-800: #4c2741;
+  --color-plum-900: #371c2f;
+
+  /* -- Sand: the warm neutral the whole app sits on. ---------------------- */
+  --color-sand-50: #fff7f2;
+  --color-sand-100: #faeee7;
+  --color-sand-200: #f1e0d7;
+  --color-sand-300: #e0cbc0;
+  --color-sand-400: #c6ada2;
+  --color-sand-500: #a9968f;
+  --color-sand-600: #877068;
+  --color-sand-700: #6f5a52;
+  --color-sand-800: #52403a;
+  --color-sand-900: #3a2a25;
+  --color-sand-950: #241815;
+
+  /* -- Sage / Amber / Rust: semantic ramps, dark-mode capable. ------------ */
+  --color-sage-50: #eef7f3;
+  --color-sage-100: #d8ede3;
+  --color-sage-200: #b3dcc8;
+  --color-sage-300: #86c6a8;
+  --color-sage-400: #66b292;
+  --color-sage-500: #4e9f7d;
+  --color-sage-600: #3f8367;
+  --color-sage-700: #336953;
+  --color-sage-800: #275140;
+  --color-sage-900: #1d3d30;
+
+  --color-amber-50: #fdf6ea;
+  --color-amber-100: #faeacc;
+  --color-amber-200: #f4d399;
+  --color-amber-300: #edbb66;
+  --color-amber-400: #e9ae4e;
+  --color-amber-500: #e6a23c;
+  --color-amber-600: #c4842a;
+  --color-amber-700: #9c6821;
+  --color-amber-800: #754e19;
+  --color-amber-900: #573a13;
+
+  --color-rust-50: #fbeeee;
+  --color-rust-100: #f6d9d9;
+  --color-rust-200: #ecb4b4;
+  --color-rust-300: #e08d8d;
+  --color-rust-400: #d66b6b;
+  --color-rust-500: #c94a4a;
+  --color-rust-600: #ad3c3c;
+  --color-rust-700: #8b3030;
+  --color-rust-800: #6a2525;
+  --color-rust-900: #4e1c1c;
+
+  /* -- Type ---------------------------------------------------------------
+     Rubik carries headings and money: geometric Hebrew with softened
+     terminals, so large figures read warm rather than clinical.
+     Assistant carries everything else: the Hebrew humanist workhorse,
+     built for small sizes.                                               */
+  --font-sans: var(--font-assistant), ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", sans-serif;
+  --font-display: var(--font-rubik), var(--font-assistant), ui-sans-serif,
+    system-ui, sans-serif;
+
+  --text-eyebrow: 0.6875rem;
+  --text-eyebrow--line-height: 1rem;
+  --text-eyebrow--letter-spacing: 0.08em;
+  --text-eyebrow--font-weight: 600;
+
+  /* Money, three sizes. Line heights are tight so figures anchor their row. */
+  --text-figure-lg: 2.75rem;
+  --text-figure-lg--line-height: 1.05;
+  --text-figure-lg--letter-spacing: -0.025em;
+  --text-figure: 1.75rem;
+  --text-figure--line-height: 1.15;
+  --text-figure--letter-spacing: -0.02em;
+  --text-figure-sm: 1.125rem;
+  --text-figure-sm--line-height: 1.3;
+  --text-figure-sm--letter-spacing: -0.01em;
+
+  /* -- Radius ladder. Semantic, so nesting stays correct. ----------------- */
+  --radius-control: 0.625rem;
+  --radius-row: 0.75rem;
+  --radius-card: 1rem;
+  --radius-panel: 1.25rem;
+
+  /* -- Elevation. Warm-tinted, never neutral black. ----------------------- */
+  --shadow-card: 0 1px 2px rgb(58 42 37 / 0.04);
+  --shadow-raised: 0 2px 4px rgb(58 42 37 / 0.06), 0 8px 24px -12px rgb(58 42 37 / 0.12);
+  --shadow-overlay: 0 24px 60px -20px rgb(36 24 21 / 0.35);
+
+  --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
+/* ---------------------------------------------------------------------------
+   Semantic layer — light
+   ------------------------------------------------------------------------ */
+:root {
+  color-scheme: light;
+
+  --canvas: var(--color-sand-50);
+  --surface: #ffffff;
+  --surface-sunken: var(--color-sand-100);
+  --line: var(--color-sand-200);
+  --line-strong: var(--color-sand-300);
+
+  --ink: var(--color-sand-900);
+  --ink-muted: var(--color-sand-700);
+  --ink-faint: var(--color-sand-500);
+  --ink-inverse: var(--color-sand-50);
+
+  --brand: var(--color-clay-500);
+  --brand-hover: var(--color-clay-600);
+  --brand-ink: #ffffff;
+  --brand-soft: var(--color-clay-50);
+  --brand-soft-ink: var(--color-clay-700);
+  --brand-line: var(--color-clay-200);
+
+  --accent: var(--color-plum-500);
+  --accent-hover: var(--color-plum-600);
+  --accent-ink: #ffffff;
+  --accent-soft: var(--color-plum-50);
+  --accent-soft-ink: var(--color-plum-700);
+
+  --positive: var(--color-sage-600);
+  --positive-soft: var(--color-sage-50);
+  --positive-soft-ink: var(--color-sage-700);
+
+  --caution: var(--color-amber-600);
+  --caution-soft: var(--color-amber-50);
+  --caution-soft-ink: var(--color-amber-800);
+
+  --critical: var(--color-rust-500);
+  --critical-hover: var(--color-rust-600);
+  --critical-soft: var(--color-rust-50);
+  --critical-soft-ink: var(--color-rust-700);
+
+  --ring: var(--color-clay-500);
+}
+
+/* ---------------------------------------------------------------------------
+   Semantic layer — dark
+   Only the aliases move. Every utility built on them follows.
+   ------------------------------------------------------------------------ */
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #1E1412;
-    --surface: #2A1E1B;
-    --surface-muted: #3A2E2B;
-    --text-primary: #F5EDE9;
-    --text-secondary: #C9B9B2;
-    --text-disabled: #8A7A73;
-    --primary: #E08C6E;
-    --primary-hover: #D47A5C;
-    --secondary: #B07AA0;
-    --success: #5FAF8F;
-    --warning: #F0B84C;
-    --error: #D95A5A;
+    color-scheme: dark;
+
+    --canvas: #1e1412;
+    --surface: #271b18;
+    --surface-sunken: #170f0d;
+    --line: #3a2b26;
+    --line-strong: #4d3a33;
+
+    --ink: #f5ede9;
+    --ink-muted: #c9b9b2;
+    --ink-faint: #8a7a73;
+    --ink-inverse: var(--color-sand-950);
+
+    --brand: #e08c6e;
+    --brand-hover: #eda98f;
+    --brand-ink: #2b1710;
+    --brand-soft: #3a2019;
+    --brand-soft-ink: #f4c8b6;
+    --brand-line: #5c3325;
+
+    --accent: #b07aa0;
+    --accent-hover: #cc9ac0;
+    --accent-ink: #2a1524;
+    --accent-soft: #35202f;
+    --accent-soft-ink: #e0bdd7;
+
+    --positive: #5faf8f;
+    --positive-soft: #1a2f27;
+    --positive-soft-ink: #86c6a8;
+
+    --caution: #f0b84c;
+    --caution-soft: #33260f;
+    --caution-soft-ink: #f4d399;
+
+    --critical: #d95a5a;
+    --critical-hover: #e08d8d;
+    --critical-soft: #341b1b;
+    --critical-soft-ink: #ecb4b4;
+
+    --ring: #e08c6e;
   }
 }
 
+/* Expose the semantic layer as utilities. `inline` keeps the var() reference,
+   so a single class is correct in both themes. */
 @theme inline {
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-surface-sunken: var(--surface-sunken);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-ink-faint: var(--ink-faint);
+  --color-ink-inverse: var(--ink-inverse);
+
+  --color-brand: var(--brand);
+  --color-brand-hover: var(--brand-hover);
+  --color-brand-ink: var(--brand-ink);
+  --color-brand-soft: var(--brand-soft);
+  --color-brand-soft-ink: var(--brand-soft-ink);
+  --color-brand-line: var(--brand-line);
+
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-ink: var(--accent-ink);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-soft-ink: var(--accent-soft-ink);
+
+  --color-positive: var(--positive);
+  --color-positive-soft: var(--positive-soft);
+  --color-positive-soft-ink: var(--positive-soft-ink);
+
+  --color-caution: var(--caution);
+  --color-caution-soft: var(--caution-soft);
+  --color-caution-soft-ink: var(--caution-soft-ink);
+
+  --color-critical: var(--critical);
+  --color-critical-hover: var(--critical-hover);
+  --color-critical-soft: var(--critical-soft);
+  --color-critical-soft-ink: var(--critical-soft-ink);
+
+  --color-ring: var(--ring);
 }
 
-body {
-  background: var(--bg);
-  color: var(--text-primary);
-  font-family: Arial, Helvetica, sans-serif;
+/* ---------------------------------------------------------------------------
+   Base
+   ------------------------------------------------------------------------ */
+@layer base {
+  * {
+    border-color: var(--line);
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--canvas);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-feature-settings: "kern";
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-display);
+    color: var(--ink);
+    text-wrap: balance;
+  }
+
+  /* One focus treatment for the whole app. */
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+    border-radius: var(--radius-control);
+  }
+
+  ::selection {
+    background-color: var(--brand-soft);
+    color: var(--brand-soft-ink);
+  }
+
+  /* Money and any column of figures must not jitter between values. */
+  input[type="number"] {
+    font-variant-numeric: tabular-nums;
+  }
+
+  input[type="number"]::-webkit-outer-spin-button,
+  input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  input[type="number"] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+  }
+
+  /* Placeholder must never be mistaken for a value. */
+  ::placeholder {
+    color: var(--ink-faint);
+    opacity: 1;
+  }
 }
 
-/* Safe area insets for iOS devices with notches */
+/* ---------------------------------------------------------------------------
+   Utilities
+   ------------------------------------------------------------------------ */
+
+/* Figures line up in a column. Applied by <Money> and every numeric cell. */
+@utility tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Isolates a bidi-neutral run (money, emails, latin names) from the
+   surrounding Hebrew so the browser cannot reorder it. */
+@utility bidi-isolate {
+  unicode-bidi: isolate;
+}
+
+/* The ledger rule: a section label followed by a hairline that eats the
+   remaining width. Direction-agnostic, so it cannot break under dir="rtl". */
+@utility ledger-rule {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+@utility ledger-rule-line {
+  flex: 1 1 0%;
+  height: 1px;
+  background-color: var(--line);
+}
+
+/* iOS notch. */
 .safe-area-inset-bottom {
   padding-bottom: env(safe-area-inset-bottom);
+}
+
+.safe-area-inset-top {
+  padding-top: env(safe-area-inset-top);
+}
+
+/* ---------------------------------------------------------------------------
+   Range input — used by both payment modals. Styled to the brand in both
+   directions; WebKit needs the thumb declared separately from Firefox.
+   ------------------------------------------------------------------------ */
+input[type="range"].slider-brand {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 1.5rem;
+  background: transparent;
+  cursor: pointer;
+}
+
+input[type="range"].slider-brand::-webkit-slider-runnable-track {
+  height: 0.5rem;
+  border-radius: 9999px;
+  background-color: var(--surface-sunken);
+  border: 1px solid var(--line);
+}
+
+input[type="range"].slider-brand::-moz-range-track {
+  height: 0.5rem;
+  border-radius: 9999px;
+  background-color: var(--surface-sunken);
+  border: 1px solid var(--line);
+}
+
+input[type="range"].slider-brand::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  margin-top: -0.4375rem;
+  height: 1.375rem;
+  width: 1.375rem;
+  border-radius: 9999px;
+  background-color: var(--brand);
+  border: 3px solid var(--surface);
+  box-shadow: 0 1px 4px rgb(58 42 37 / 0.3);
+}
+
+input[type="range"].slider-brand::-moz-range-thumb {
+  height: 1.375rem;
+  width: 1.375rem;
+  border-radius: 9999px;
+  background-color: var(--brand);
+  border: 3px solid var(--surface);
+  box-shadow: 0 1px 4px rgb(58 42 37 / 0.3);
+}
+
+/* ---------------------------------------------------------------------------
+   Motion
+   ------------------------------------------------------------------------ */
+@keyframes maaserot-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes maaserot-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* The reckoning bar draws itself in on load — the one orchestrated moment. */
+@keyframes maaserot-measure {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes maaserot-shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+.animate-fade-in {
+  animation: maaserot-fade-in 0.2s var(--ease-out-soft) both;
+}
+
+.animate-rise {
+  animation: maaserot-rise 0.24s var(--ease-out-soft) both;
+}
+
+.animate-measure {
+  transform-origin: var(--measure-origin, left);
+  animation: maaserot-measure 0.7s var(--ease-out-soft) both;
+}
+
+[dir="rtl"] .animate-measure {
+  --measure-origin: right;
+}
+
+.skeleton {
+  background-image: linear-gradient(
+    90deg,
+    var(--surface-sunken) 25%,
+    var(--line) 50%,
+    var(--surface-sunken) 75%
+  );
+  background-size: 200% 100%;
+  animation: maaserot-shimmer 1.4s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .animate-measure {
+    transform: scaleX(1);
+  }
 }

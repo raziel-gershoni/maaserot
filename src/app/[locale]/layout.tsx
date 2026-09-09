@@ -2,7 +2,8 @@ import { NextIntlClientProvider } from 'next-intl';
 import { getMessages } from 'next-intl/server';
 import { notFound } from 'next/navigation';
 import { routing } from '@/i18n/routing';
-import type { Metadata } from 'next';
+import { fontVariables } from '@/lib/fonts';
+import type { Metadata, Viewport } from 'next';
 import '../globals.css';
 
 export const metadata: Metadata = {
@@ -22,6 +23,18 @@ export const metadata: Metadata = {
     apple: '/icon-192x192.png',
   },
   manifest: '/manifest.json',
+};
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  viewportFit: 'cover',
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#D47A5C' },
+    { media: '(prefers-color-scheme: dark)', color: '#E08C6E' },
+  ],
 };
 
 export function generateStaticParams() {
@@ -46,26 +59,12 @@ export default async function LocaleLayout({
   const isRTL = locale === 'he';
 
   return (
-    <html lang={locale} dir={isRTL ? 'rtl' : 'ltr'} className="h-full">
-      <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
-        <meta name="theme-color" content="#D47A5C" media="(prefers-color-scheme: light)" />
-        <meta name="theme-color" content="#E08C6E" media="(prefers-color-scheme: dark)" />
-        <meta name="description" content="Track your maaser (charity) obligations and payments" />
-
-        {/* PWA Manifest */}
-        <link rel="manifest" href="/manifest.json" />
-
-        {/* Favicon */}
-        <link rel="icon" href="/favicon.ico" />
-
-        {/* Apple Touch Icons */}
-        <link rel="apple-touch-icon" href="/icon-192x192.png" />
-        <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-        <meta name="apple-mobile-web-app-title" content="Maaserot" />
-      </head>
-      <body className="antialiased h-full bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100">
+    <html
+      lang={locale}
+      dir={isRTL ? 'rtl' : 'ltr'}
+      className={`h-full ${fontVariables}`}
+    >
+      <body className="antialiased h-full bg-canvas text-ink">
         <NextIntlClientProvider messages={messages}>
           {children}
         </NextIntlClientProvider>
