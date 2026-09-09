@@ -95,10 +95,9 @@ function VerifyEmailContent() {
         const raw = data?.error ?? data?.code;
 
         // Already verified is not a failure — it is a shortcut to signing in.
-        if (
-          typeof raw === 'string' &&
-          raw.toLowerCase().includes('already verified')
-        ) {
+        // The route signals it with a `reason` field alongside the code; it
+        // no longer returns the English prose this used to match on.
+        if (data?.reason === 'already_verified') {
           setFeedback({ tone: 'info', message: t('alreadyVerified') });
         } else {
           setFeedback({

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { signOut } from 'next-auth/react';
 import {
   Alert,
@@ -58,6 +58,7 @@ export default function SettingsPage() {
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [logoutError, setLogoutError] = useState('');
 
+  const locale = useLocale();
   const t = useTranslations('settings');
   const tCommon = useTranslations('common');
   const tErrors = useTranslations('errors');
@@ -117,8 +118,12 @@ export default function SettingsPage() {
       setSuccess(true);
       setOriginalSettings(settings);
 
-      // Reload page if locale changed to apply new language
+      // Reload page if locale changed to apply new language.
+      // The cookie has to move too: localeMiddleware redirects any URL whose
+      // locale segment disagrees with NEXT_LOCALE, so navigating without
+      // updating it just bounces straight back to the old language.
       if (settings.locale !== originalSettings?.locale) {
+        document.cookie = `NEXT_LOCALE=${settings.locale}; path=/; max-age=31536000`;
         setTimeout(() => {
           window.location.href = `/${settings.locale}/settings`;
         }, 1000);
@@ -182,7 +187,8 @@ export default function SettingsPage() {
     setIsLoggingOut(true);
 
     try {
-      await signOut({ callbackUrl: '/login' });
+      // localePrefix is 'always': an unprefixed /login 404s.
+      await signOut({ callbackUrl: `/${locale}/login` });
     } catch {
       setLogoutError(translateApiError(tErrors, null));
       setIsLoggingOut(false);

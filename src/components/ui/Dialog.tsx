@@ -41,11 +41,22 @@ export function Dialog({
   const titleId = useId();
   const descId = useId();
 
+  // Every call site passes a fresh arrow for onClose, so memoising the key
+  // handler on the prop itself would rebuild it on each parent render. The
+  // effect below would then tear down and re-run continuously while the dialog
+  // is open, and its cleanup restores focus to the trigger — pulling focus out
+  // of the panel on every keystroke. Read the latest onClose through a ref and
+  // keep the handler genuinely stable.
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  });
+
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.preventDefault();
-        onClose();
+        onCloseRef.current();
         return;
       }
       if (e.key !== 'Tab' || !panelRef.current) return;
@@ -67,7 +78,7 @@ export function Dialog({
         first.focus();
       }
     },
-    [onClose]
+    []
   );
 
   useEffect(() => {

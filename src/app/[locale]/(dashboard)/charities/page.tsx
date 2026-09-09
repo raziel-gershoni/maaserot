@@ -365,7 +365,8 @@ export default function CharitiesPage() {
                 {t('totalMonthlyCommitment')}
               </p>
               <div className="mt-1.5">
-                {isFetching ? (
+                {isFetching || loadError ? (
+                  // A failed fetch must never render as a confident 0.00.
                   <Skeleton className="h-11 w-44" />
                 ) : (
                   <Money

@@ -5,6 +5,8 @@ export interface ReckoningSegment {
   key: string;
   label: string;
   agorot: number;
+  /** Clamped share of the track. May be less than `agorot` when overpaid. */
+  width: number;
   /** Tailwind background utility for the segment fill. */
   fill: string;
   /** Tailwind background utility for the legend dot. */
@@ -35,24 +37,27 @@ export function ReckoningBar({
   labels: { fixed: string; paid: string; remaining: string; empty: string };
   className?: string;
 }) {
-  // Clamp against overpayment and against fixed charities exceeding the total,
-  // so segments always sum to at most the track.
-  const fixedPart = Math.max(0, Math.min(fixedCharities, totalMaaser));
-  const paidPart = Math.max(0, Math.min(paid, totalMaaser - fixedPart));
-  const remaining = Math.max(0, totalMaaser - fixedPart - paidPart);
+  // Geometry is clamped so the segments can never overflow the track, but the
+  // legend must report the REAL amounts — otherwise an overpaid month shows a
+  // smaller "paid" here than the stat tile beside it, under the same label.
+  const fixedWidth = Math.max(0, Math.min(fixedCharities, totalMaaser));
+  const paidWidth = Math.max(0, Math.min(paid, totalMaaser - fixedWidth));
+  const remaining = Math.max(0, totalMaaser - fixedCharities - paid);
 
   const segments: ReckoningSegment[] = [
     {
       key: 'fixed',
       label: labels.fixed,
-      agorot: fixedPart,
+      agorot: fixedCharities,
+      width: fixedWidth,
       fill: 'bg-accent/45',
       dot: 'bg-accent/45',
     },
     {
       key: 'paid',
       label: labels.paid,
-      agorot: paidPart,
+      agorot: paid,
+      width: paidWidth,
       fill: 'bg-positive/55',
       dot: 'bg-positive/55',
     },
@@ -60,12 +65,13 @@ export function ReckoningBar({
       key: 'remaining',
       label: labels.remaining,
       agorot: remaining,
+      width: remaining,
       fill: 'bg-brand',
       dot: 'bg-brand',
     },
   ];
 
-  const visible = segments.filter((s) => s.agorot > 0);
+  const visible = segments.filter((s) => s.width > 0);
   const hasTotal = totalMaaser > 0;
 
   return (
@@ -93,7 +99,7 @@ export function ReckoningBar({
                 key={s.key}
                 className={cn('animate-measure h-full', s.fill)}
                 style={{
-                  width: `${(s.agorot / totalMaaser) * 100}%`,
+                  width: `${(s.width / totalMaaser) * 100}%`,
                   animationDelay: `${i * 90}ms`,
                 }}
               />

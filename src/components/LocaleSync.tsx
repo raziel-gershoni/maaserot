@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from '@/i18n/routing';
+import { usePathname, useRouter } from '@/i18n/routing';
 import { useTranslations } from 'next-intl';
 import { Spinner } from '@/components/ui';
 
@@ -16,6 +16,8 @@ import { Spinner } from '@/components/ui';
  */
 export default function LocaleSync() {
   const router = useRouter();
+  // This pathname is locale-stripped; the router re-adds the prefix itself.
+  const pathname = usePathname();
   const t = useTranslations('common');
   const [switching, setSwitching] = useState(false);
 
@@ -38,16 +40,15 @@ export default function LocaleSync() {
             // Set cookie
             document.cookie = `NEXT_LOCALE=${userLocale}; path=/; max-age=31536000`;
 
-            // Navigate to correct locale without full page reload
+            // Navigate to correct locale without full page reload.
+            // Hand the router the locale-stripped path and let it apply the
+            // prefix — passing the already-prefixed pathname produced
+            // /he/en/dashboard, which matches no route.
             const currentLocale = window.location.pathname.split('/')[1];
             if (currentLocale !== userLocale) {
               if (cancelled) return;
               setSwitching(true);
-              const newPath = window.location.pathname.replace(
-                `/${currentLocale}`,
-                `/${userLocale}`
-              );
-              router.replace(newPath);
+              router.replace(pathname, { locale: userLocale });
             }
           }
         } catch (error) {
@@ -61,6 +62,9 @@ export default function LocaleSync() {
     return () => {
       cancelled = true;
     };
+    // Mount-only: this reconciles the locale once, on first load with no
+    // cookie. Listing `pathname` would re-run the sync on every navigation.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router]);
 
   if (!switching) return null;
