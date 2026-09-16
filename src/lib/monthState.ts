@@ -1,137 +1,80 @@
 import { prisma } from './prisma';
+import { reckonMonth, resolveGroupMembers } from './reckoning';
 
-// Calculate state for a single month
+/**
+ * Loading the rows a reckoning needs.
+ *
+ * The arithmetic itself lives in ./reckoning — these functions only fetch.
+ * Keeping the two apart is what lets the rules be tested without a database
+ * and stops them drifting between screens, which is how the dashboard and the
+ * history page came to report different amounts for the same month.
+ */
+
+export interface MonthState {
+  month: string;
+  totalMaaser: number;
+  fixedCharitiesTotal: number;
+  totalPaid: number;
+  unpaid: number;
+  snapshots: Awaited<ReturnType<typeof fetchSnapshots>>;
+  hasPayments: boolean;
+}
+
+function fetchSnapshots(userId: string, months: string[]) {
+  return prisma.groupPaymentSnapshot.findMany({
+    where: { month: { in: months }, members: { some: { userId } } },
+    orderBy: { paidAt: 'asc' },
+    include: { members: true },
+  });
+}
+
+/**
+ * One user's own position for a month: their maaser, their commitments, and
+ * every payment they took part in. This is the per-person view — for what a
+ * couple owes together, use the group functions below.
+ */
 export async function calculateCurrentMonthState(userId: string, month: string) {
-  // Fetch all data in parallel - these queries are independent
-  const [incomes, groupSnapshots, fixedCharities] = await Promise.all([
-    prisma.income.findMany({
-      where: { userId, month },
-    }),
-    prisma.groupPaymentSnapshot.findMany({
-      where: {
-        month,
-        members: { some: { userId } },
-      },
-      orderBy: { paidAt: 'asc' },
-      include: { members: true },
-    }),
-    prisma.fixedCharity.findMany({
-      where: { userId, isActive: true },
-    }),
+  const [incomes, snapshots, fixedCharities] = await Promise.all([
+    prisma.income.findMany({ where: { userId, month } }),
+    fetchSnapshots(userId, [month]),
+    prisma.fixedCharity.findMany({ where: { userId, isActive: true } }),
   ]);
 
-  const totalMaaser = incomes.reduce((sum, i) => sum + i.maaser, 0);
-
-  // Always use live active charities for dashboard calculation
-  const fixedCharitiesTotal = fixedCharities.reduce((sum, c) => sum + c.amount, 0);
-
-  // Sum all payments where user participated
-  const totalPaid = groupSnapshots.reduce((sum, s) => sum + s.groupAmountPaid, 0);
-
-  // Unpaid amount this month (calculated directly)
-  const unpaid = Math.max(0, totalMaaser - fixedCharitiesTotal - totalPaid);
-
-  return {
-    totalMaaser,
-    fixedCharitiesTotal,
-    totalPaid,
-    unpaid,
-    snapshots: groupSnapshots,
-    hasPayments: groupSnapshots.length > 0
-  };
-}
-
-// Calculate group-aware month state for a user
-// For solo-only months, returns individual state as-is.
-// For months with group payments, calculates at the group level
-// (summing all members' maaser/fixed charities, subtracting group payments).
-export async function calculateGroupMonthState(userId: string, month: string) {
-  const individualState = await calculateCurrentMonthState(userId, month);
-
-  // Check if any snapshots have more than 1 member (group payments)
-  const hasGroupSnapshots = individualState.snapshots.some(s => s.members.length > 1);
-
-  if (!hasGroupSnapshots) {
-    // Solo-only month — individual state is correct
-    return individualState;
-  }
-
-  // Collect all partner IDs from group snapshots
-  const partnerIds = new Set<string>();
-  for (const snapshot of individualState.snapshots) {
-    if (snapshot.members.length > 1) {
-      for (const member of snapshot.members) {
-        if (member.userId !== userId) {
-          partnerIds.add(member.userId);
-        }
-      }
-    }
-  }
-
-  // Fetch all members' individual states
-  const allMemberIds = [userId, ...Array.from(partnerIds)];
-  const memberStates = await Promise.all(
-    allMemberIds.map(id => calculateCurrentMonthState(id, month))
-  );
-
-  // Sum maaser and fixed charities across all members
-  let totalMaaser = 0;
-  let totalFixedCharities = 0;
-  for (const state of memberStates) {
-    totalMaaser += state.totalMaaser;
-    totalFixedCharities += state.fixedCharitiesTotal;
-  }
-
-  // Filter to exact-composition group snapshots (matching this group)
-  const sortedMemberIds = [...allMemberIds].sort();
-  const exactGroupSnapshots = individualState.snapshots.filter(snapshot => {
-    const snapshotMemberIds = snapshot.members.map(m => m.userId).sort();
-    return JSON.stringify(snapshotMemberIds) === JSON.stringify(sortedMemberIds);
+  const reckoning = reckonMonth({
+    memberIds: [userId],
+    incomes,
+    fixedCharities,
+    // Every snapshot here already involves this user, and from their own
+    // perspective the whole amount counts against what they were part of.
+    payments: snapshots.map((s) => ({
+      memberIds: [userId],
+      groupAmountPaid: s.groupAmountPaid,
+    })),
   });
 
-  // Always use live fixed charities for dashboard calculation
-  let groupPaid = 0;
-  for (const snapshot of exactGroupSnapshots) {
-    groupPaid += snapshot.groupAmountPaid;
-  }
-
-  const groupUnpaid = Math.max(0, totalMaaser - totalFixedCharities - groupPaid);
-
   return {
-    totalMaaser,
-    fixedCharitiesTotal: totalFixedCharities,
-    totalPaid: groupPaid,
-    unpaid: groupUnpaid,
-    snapshots: individualState.snapshots,
-    hasPayments: individualState.hasPayments,
+    ...reckoning,
+    snapshots,
+    hasPayments: snapshots.length > 0,
   };
 }
 
-// Batch calculate group month states for multiple months (avoids N+1 queries)
-export async function calculateGroupMonthStatesInBatch(userId: string, months: string[]) {
+/**
+ * Group state for many months at once, in a fixed number of round trips
+ * regardless of how many months are asked for.
+ */
+export async function calculateGroupMonthStatesInBatch(
+  userId: string,
+  months: string[]
+): Promise<MonthState[]> {
   if (months.length === 0) return [];
 
-  // Phase 1: Fetch all user data across all months in 4 parallel queries
-  const [allIncomes, allSnapshots, fixedCharities, partnership] = await Promise.all([
-    prisma.income.findMany({
-      where: { userId, month: { in: months } },
-    }),
-    prisma.groupPaymentSnapshot.findMany({
-      where: {
-        month: { in: months },
-        members: { some: { userId } },
-      },
-      orderBy: { paidAt: 'asc' },
-      include: { members: true },
-    }),
-    prisma.fixedCharity.findMany({
-      where: { userId, isActive: true },
-    }),
-    // The standing partnership, not just whoever appears in past payments.
-    // Deriving the group from snapshots alone meant a month with a partner but
-    // no group payment yet was reckoned solo — so history showed only this
-    // user's debt while the dashboard, which reads the partnership, showed the
-    // couple's.
+  const [ownIncomes, allSnapshots, ownCharities, partnership] = await Promise.all([
+    prisma.income.findMany({ where: { userId, month: { in: months } } }),
+    fetchSnapshots(userId, months),
+    prisma.fixedCharity.findMany({ where: { userId, isActive: true } }),
+    // The standing partnership, not just whoever appears in past payments: a
+    // month with a partner but no group payment yet is still a joint month.
     prisma.partnership.findFirst({
       where: {
         status: 'ACCEPTED',
@@ -141,74 +84,47 @@ export async function calculateGroupMonthStatesInBatch(userId: string, months: s
     }),
   ]);
 
-  const fixedCharitiesTotal = fixedCharities.reduce((sum, c) => sum + c.amount, 0);
-
   const currentPartnerId = partnership
     ? partnership.user1Id === userId
       ? partnership.user2Id
       : partnership.user1Id
     : null;
 
-  // Everyone whose data we may need: the standing partner, plus anyone this
-  // user has previously settled a month with (who may no longer be a partner).
-  const partnerIds = new Set<string>();
-  if (currentPartnerId) partnerIds.add(currentPartnerId);
+  // Everyone whose rows we may need: the standing partner, plus anyone this
+  // user has previously settled a month with, who may no longer be a partner.
+  const otherIds = new Set<string>();
+  if (currentPartnerId) otherIds.add(currentPartnerId);
   for (const snapshot of allSnapshots) {
     if (snapshot.members.length > 1) {
       for (const member of snapshot.members) {
-        if (member.userId !== userId) partnerIds.add(member.userId);
+        if (member.userId !== userId) otherIds.add(member.userId);
       }
     }
   }
 
-  // Phase 2: Fetch partner data in bulk if needed (2 parallel queries)
-  let partnerIncomes: typeof allIncomes = [];
-  const partnerFixedCharitiesMap = new Map<string, number>();
-  if (partnerIds.size > 0) {
-    const partnerIdArray = [...partnerIds];
-    const [pIncomes, pCharities] = await Promise.all([
-      prisma.income.findMany({
-        where: { userId: { in: partnerIdArray }, month: { in: months } },
-      }),
-      prisma.fixedCharity.findMany({
-        where: { userId: { in: partnerIdArray }, isActive: true },
-      }),
+  let otherIncomes: typeof ownIncomes = [];
+  let otherCharities: typeof ownCharities = [];
+  if (otherIds.size > 0) {
+    const ids = [...otherIds];
+    [otherIncomes, otherCharities] = await Promise.all([
+      prisma.income.findMany({ where: { userId: { in: ids }, month: { in: months } } }),
+      prisma.fixedCharity.findMany({ where: { userId: { in: ids }, isActive: true } }),
     ]);
-    partnerIncomes = pIncomes;
-    for (const charity of pCharities) {
-      partnerFixedCharitiesMap.set(
-        charity.userId,
-        (partnerFixedCharitiesMap.get(charity.userId) || 0) + charity.amount
-      );
-    }
   }
 
-  // Group data by month and compute in memory
-  const incomesByMonth = new Map<string, typeof allIncomes>();
-  for (const income of [...allIncomes, ...partnerIncomes]) {
-    const key = `${income.userId}:${income.month}`;
-    if (!incomesByMonth.has(key)) incomesByMonth.set(key, []);
-    incomesByMonth.get(key)!.push(income);
-  }
+  const incomes = [...ownIncomes, ...otherIncomes];
+  const fixedCharities = [...ownCharities, ...otherCharities];
 
   const snapshotsByMonth = new Map<string, typeof allSnapshots>();
   for (const snapshot of allSnapshots) {
-    if (!snapshotsByMonth.has(snapshot.month)) snapshotsByMonth.set(snapshot.month, []);
-    snapshotsByMonth.get(snapshot.month)!.push(snapshot);
+    const list = snapshotsByMonth.get(snapshot.month) ?? [];
+    list.push(snapshot);
+    snapshotsByMonth.set(snapshot.month, list);
   }
 
-  return months.map(month => {
-    const monthSnapshots = snapshotsByMonth.get(month) || [];
-    const userIncomes = incomesByMonth.get(`${userId}:${month}`) || [];
-    const userTotalMaaser = userIncomes.reduce((sum, i) => sum + i.maaser, 0);
-    const totalPaid = monthSnapshots.reduce((sum, s) => sum + s.groupAmountPaid, 0);
+  return months.map((month) => {
+    const monthSnapshots = snapshotsByMonth.get(month) ?? [];
 
-    // Who is reckoned together this month?
-    //
-    // A month already settled as a group is defined by that payment's members:
-    // it is historical fact, and it stays correct after a partnership ends.
-    // Any other month follows the standing partnership, which is what the
-    // dashboard shows for the same month.
     const settledWith = new Set<string>();
     for (const snapshot of monthSnapshots) {
       if (snapshot.members.length > 1) {
@@ -216,100 +132,33 @@ export async function calculateGroupMonthStatesInBatch(userId: string, months: s
       }
     }
 
-    const memberIdsInMonth =
-      settledWith.size > 0
-        ? new Set<string>([userId, ...settledWith])
-        : new Set<string>(
-            currentPartnerId ? [userId, currentPartnerId] : [userId]
-          );
+    const memberIds = resolveGroupMembers({
+      userId,
+      partnerId: currentPartnerId,
+      settledWith: [...settledWith],
+    });
 
-    if (memberIdsInMonth.size === 1) {
-      // Solo-only month
-      const unpaid = Math.max(0, userTotalMaaser - fixedCharitiesTotal - totalPaid);
-      return {
-        month,
-        totalMaaser: userTotalMaaser,
-        fixedCharitiesTotal,
-        totalPaid,
-        unpaid,
-        snapshots: monthSnapshots,
-        hasPayments: monthSnapshots.length > 0,
-      };
-    }
-
-    // Sum maaser and fixed charities across all members
-    let totalMaaser = userTotalMaaser;
-    let totalFixedCharities = fixedCharitiesTotal;
-    for (const partnerId of memberIdsInMonth) {
-      if (partnerId === userId) continue;
-      const pIncomes = incomesByMonth.get(`${partnerId}:${month}`) || [];
-      totalMaaser += pIncomes.reduce((sum, i) => sum + i.maaser, 0);
-      totalFixedCharities += partnerFixedCharitiesMap.get(partnerId) || 0;
-    }
-
-    // Money given by anyone in this group counts against the shared
-    // obligation, so a payment counts when its members are all part of the
-    // group — a solo payment by one member included. Requiring an exact
-    // composition match dropped those, reporting nothing paid for a month that
-    // had been partly settled. A payment involving someone outside the group
-    // belongs to a different reckoning and is left out.
-    let groupPaid = 0;
-    for (const snapshot of monthSnapshots) {
-      const belongsToGroup = snapshot.members.every(m =>
-        memberIdsInMonth.has(m.userId)
-      );
-      if (belongsToGroup) groupPaid += snapshot.groupAmountPaid;
-    }
-
-    const groupUnpaid = Math.max(0, totalMaaser - totalFixedCharities - groupPaid);
+    const reckoning = reckonMonth({
+      memberIds,
+      incomes: incomes.filter((i) => i.month === month),
+      fixedCharities,
+      payments: monthSnapshots.map((s) => ({
+        memberIds: s.members.map((m) => m.userId),
+        groupAmountPaid: s.groupAmountPaid,
+      })),
+    });
 
     return {
       month,
-      totalMaaser,
-      fixedCharitiesTotal: totalFixedCharities,
-      totalPaid: groupPaid,
-      unpaid: groupUnpaid,
+      ...reckoning,
       snapshots: monthSnapshots,
       hasPayments: monthSnapshots.length > 0,
     };
   });
 }
 
-// Calculate accumulated unpaid across all months (for overflow handling)
-export async function calculateTotalAccumulatedUnpaid(
-  userId: string,
-  upToMonth: string
-): Promise<number> {
-  // Get all distinct months that have incomes or snapshots
-  const incomeMonths = await prisma.income.findMany({
-    where: { userId },
-    select: { month: true },
-    distinct: ['month']
-  });
-
-  const snapshotMonths = await prisma.groupPaymentSnapshot.findMany({
-    where: {
-      members: { some: { userId } }
-    },
-    select: { month: true },
-    distinct: ['month']
-  });
-
-  // Combine and deduplicate months
-  const allMonthsSet = new Set<string>([
-    ...incomeMonths.map(i => i.month),
-    ...snapshotMonths.map(s => s.month)
-  ]);
-
-  // Filter to months <= upToMonth and sort
-  const allMonths = Array.from(allMonthsSet)
-    .filter(m => m <= upToMonth)
-    .sort();
-
-  // Calculate all months in parallel
-  const states = await Promise.all(
-    allMonths.map(month => calculateCurrentMonthState(userId, month))
-  );
-
-  return states.reduce((sum, state) => sum + state.unpaid, 0);
+/** Group state for a single month. The dashboard's source of truth. */
+export async function calculateGroupMonthState(userId: string, month: string) {
+  const [state] = await calculateGroupMonthStatesInBatch(userId, [month]);
+  return state;
 }

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { getCurrentMonth } from '@/lib/calculations';
-import { calculateCurrentMonthState } from '@/lib/monthState';
+import { calculateGroupMonthState } from '@/lib/monthState';
 import { notifyPartnerIncomeAdded } from '@/lib/telegramNotify';
 import { apiError } from '../_lib/apiError';
 
@@ -91,16 +91,11 @@ async function notifyPartner(userId: string, month: string, incomeAmount: number
 
   if (!partner.telegramId) return;
 
-  // Calculate group unpaid for the notification message
-  const [myState, partnerState] = await Promise.all([
-    calculateCurrentMonthState(userId, month),
-    calculateCurrentMonthState(partner.id, month),
-  ]);
-
-  const totalMaaser = myState.totalMaaser + partnerState.totalMaaser;
-  const totalFixed = myState.fixedCharitiesTotal + partnerState.fixedCharitiesTotal;
-  const totalPaid = myState.totalPaid + partnerState.totalPaid;
-  const groupUnpaid = Math.max(0, totalMaaser - totalFixed - totalPaid);
+  // One shared reckoning. Adding the two members' own states together
+  // double-counted every group payment — each member's totalPaid already
+  // includes the whole group amount — so the message understated what the
+  // couple still owed.
+  const { unpaid: groupUnpaid } = await calculateGroupMonthState(userId, month);
 
   await notifyPartnerIncomeAdded(
     partner.telegramId,

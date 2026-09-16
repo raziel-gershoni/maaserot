@@ -5,7 +5,10 @@ import { Link } from '@/i18n/routing';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { getCurrentMonth } from '@/lib/calculations';
-import { calculateCurrentMonthState } from '@/lib/monthState';
+import {
+  calculateCurrentMonthState,
+  calculateGroupMonthState,
+} from '@/lib/monthState';
 import { translateApiError } from '@/lib/errorCodes';
 import {
   Alert,
@@ -162,19 +165,14 @@ async function loadDashboard(
   const hasPartner = !!partner;
   const hasPartnerTelegram = !!partner?.telegramId;
 
-  const allMemberIds = [userId, ...(partner ? [partner.id] : [])];
-
-  const [myMonthState, partnerMonthState, groupSnapshots] = await Promise.all([
+  // The group totals come from the shared reckoning, the same function the
+  // history page uses. They used to be computed inline here with a stricter
+  // payment-matching rule, so the two screens reported different amounts owed
+  // for the same month — and this is the screen with the Pay button.
+  const [groupState, myMonthState, partnerMonthState] = await Promise.all([
+    calculateGroupMonthState(userId, selectedMonth),
     calculateCurrentMonthState(userId, selectedMonth),
     partner ? calculateCurrentMonthState(partner.id, selectedMonth) : null,
-    prisma.groupPaymentSnapshot.findMany({
-      where: {
-        month: selectedMonth,
-        members: { some: { userId: { in: allMemberIds } } },
-      },
-      include: { members: true },
-      orderBy: { paidAt: 'asc' },
-    }),
   ]);
 
   const members: GroupMember[] = [
@@ -195,32 +193,6 @@ async function loadDashboard(
     });
   }
 
-  // Only snapshots whose member composition matches this group exactly.
-  const currentMemberIds = [...allMemberIds].sort();
-  const exactGroupSnapshots = groupSnapshots.filter(
-    (snapshot: (typeof groupSnapshots)[number]) => {
-      const snapshotMemberIds = snapshot.members
-        .map((m: { userId: string }) => m.userId)
-        .sort();
-      return JSON.stringify(snapshotMemberIds) === JSON.stringify(currentMemberIds);
-    }
-  );
-
-  let totalMaaser = 0;
-  let totalFixedCharities = 0;
-  for (const member of members) {
-    totalMaaser += member.monthState.totalMaaser;
-    totalFixedCharities += member.monthState.fixedCharitiesTotal;
-  }
-
-  // Always use live fixed charities for dashboard calculation
-  let groupPaid = 0;
-  for (const snapshot of exactGroupSnapshots) {
-    groupPaid += snapshot.groupAmountPaid;
-  }
-
-  const groupUnpaid = Math.max(0, totalMaaser - totalFixedCharities - groupPaid);
-
   return {
     locale,
     hasPartner,
@@ -228,10 +200,10 @@ async function loadDashboard(
     groupData: {
       members,
       totals: {
-        totalMaaser,
-        totalFixedCharities,
-        totalPaid: groupPaid,
-        unpaid: groupUnpaid,
+        totalMaaser: groupState.totalMaaser,
+        totalFixedCharities: groupState.fixedCharitiesTotal,
+        totalPaid: groupState.totalPaid,
+        unpaid: groupState.unpaid,
       },
     },
   };
