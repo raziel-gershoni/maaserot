@@ -228,6 +228,10 @@ No one runs a migration against any database by hand.
      `SALARY_INTAKE_DAILY_LIMIT` (default 200).
    - If any limit is exceeded: `CANCELLED`, the reply "Too many screenshots —
      try again later", and no download and no Claude call.
+   - A refused row then leaves the counts (`viaImage` set to false) but is
+     kept, so a redelivery or a later album item still stops quietly. A
+     refusal costs nothing; counted, one sender's retries could fill the
+     global limit and turn every user away for a day.
 4. **Show progress.** Reply to the screenshot with the placeholder
    "🔎 Reading the screenshot…" and store its id as `cardMessageId`. Every
    later outcome edits that message.
@@ -596,7 +600,7 @@ const result = await prisma.$transaction(async (tx) => {
 | Group chat | ignored | unchanged |
 | Unknown sender (message or tap) | "Only Telegram-signed-in accounts…" + `/tg` button (a tap gets it as its one answer) | unchanged |
 | Redelivered update / later album item | nothing | unchanged |
-| Quota exceeded | "Too many screenshots — try again later" | row `CANCELLED` |
+| Quota exceeded | "Too many screenshots — try again later" | row `CANCELLED`, `viaImage` false (not counted) |
 | Unsupported file | "Send a screenshot (photo)" | no row |
 | Image over 7.5 MB | "Image too large — send it as a photo" | row `CANCELLED` |
 | `notConfigured` | "Reading screenshots isn't set up yet — type the amount instead." | row `CANCELLED` |
