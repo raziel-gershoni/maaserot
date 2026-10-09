@@ -1,43 +1,33 @@
-import { NextResponse } from 'next/server';
+import { timingSafeEqual } from 'node:crypto';
+import { after } from 'next/server';
+import { handleUpdate } from '@/lib/salaryIntake';
+import type { TgUpdate } from '@/lib/telegramBot';
 
-const APP_URL = process.env.NEXTAUTH_URL || 'https://maaserot.vercel.app';
+/**
+ * Transport only. Authenticates Telegram, answers at once, and leaves the work
+ * to after() so a slow screenshot read never makes Telegram retry the update.
+ */
+export const maxDuration = 60;
+const WORK_BUDGET_MS = 50_000; // leaves time inside maxDuration for the last reply
+
+function fromTelegram(request: Request): boolean {
+  const expected = process.env.TELEGRAM_WEBHOOK_SECRET;
+  const got = request.headers.get('x-telegram-bot-api-secret-token');
+  if (!expected || !got) return false;
+  const a = Buffer.from(got), b = Buffer.from(expected);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
 
 export async function POST(request: Request) {
+  if (!fromTelegram(request)) return new Response(null, { status: 401 });
+  const startedAt = Date.now();
+  let update: TgUpdate;
   try {
-    const body = await request.json();
-
-    // Handle /start command — send welcome message with "Open App" button
-    if (body.message?.text === '/start') {
-      const chatId = body.message.chat.id;
-      const botToken = process.env.TELEGRAM_BOT_TOKEN;
-
-      if (!botToken) {
-        return NextResponse.json({ ok: true });
-      }
-
-      await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chat_id: chatId,
-          text: 'ברוכים הבאים למעשרות! 🎯\nלחצו על הכפתור למטה לפתיחת האפליקציה.',
-          reply_markup: {
-            inline_keyboard: [
-              [
-                {
-                  text: 'פתח את מעשרות',
-                  web_app: { url: APP_URL },
-                },
-              ],
-            ],
-          },
-        }),
-      });
-    }
-
-    return NextResponse.json({ ok: true });
-  } catch (error) {
-    console.error('Telegram webhook error:', error);
-    return NextResponse.json({ ok: true });
+    update = await request.json();
+  } catch {
+    console.error('[telegram webhook] malformed body');
+    return Response.json({ ok: true });
   }
+  after(() => handleUpdate(update, startedAt + WORK_BUDGET_MS));
+  return Response.json({ ok: true });
 }
