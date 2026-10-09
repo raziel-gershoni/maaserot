@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createFakePrisma, type FakeDb, type FakePendingIncome } from './fakePrisma';
 import { pendingRow } from './salaryIntakeHarness';
 import type { Candidate } from '@/lib/depositParsing';
@@ -33,6 +33,10 @@ const open = (patch: Partial<FakePendingIncome> = {}) =>
 
 beforeEach(() => {
   vi.clearAllMocks();
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
 });
 
 describe('createTypedRow', () => {
@@ -113,6 +117,34 @@ describe('finishReading and setCardMessage', () => {
     expect(await rows.setCardMessage(row.id, 77, ['READING'])).toBe(0);
     expect(await rows.setCardMessage(row.id, 77, ['OPEN'])).toBe(1);
     expect(db.pendingIncomes[0]).toMatchObject({ cardMessageId: 77, version: 3 });
+  });
+});
+
+describe('refuseForQuota', () => {
+  const claim = (rows: Awaited<ReturnType<typeof load>>, sourceMessageId: number) =>
+    rows.claimImageRow({ userId: 'u1', chatId: BigInt(111), sourceMessageId, mediaGroupId: null, now: NOW });
+
+  it('cancels the claim and takes it out of the counts, but keeps it claimed', async () => {
+    vi.stubEnv('SALARY_INTAKE_USER_HOURLY', '1');
+    const rows = await load();
+    await claim(rows, 1);
+    const refused = (await claim(rows, 2))!;
+    expect(await rows.quotaExceeded('u1', NOW)).toBe(true);
+
+    expect(await rows.refuseForQuota(refused.id)).toBe(1);
+
+    expect(db.pendingIncomes[1]).toMatchObject({ status: 'CANCELLED', viaImage: false, candidates: [], version: 1 });
+    expect(await rows.quotaExceeded('u1', NOW)).toBe(false);
+    await expect(claim(rows, 2)).resolves.toBeNull();
+  });
+
+  it('leaves a row that is no longer READING alone', async () => {
+    const row = open();
+    const rows = await load([row]);
+    const before = { ...row };
+
+    expect(await rows.refuseForQuota(row.id)).toBe(0);
+    expect(db.pendingIncomes[0]).toEqual(before);
   });
 });
 

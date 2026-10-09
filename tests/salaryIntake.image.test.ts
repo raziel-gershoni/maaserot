@@ -57,6 +57,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
   vi.useRealTimers();
 });
 
@@ -234,6 +235,60 @@ describe('the reading quota', () => {
     await handleUpdate(photoUpdate({ messageId: 10 }));
 
     expect(reader).toHaveBeenCalledTimes(1);
+  });
+
+  // A refusal downloads and reads nothing. Counted, one sender's retries
+  // would fill the global limit and turn everyone away for a day.
+  it("a refused screenshot is not counted, so one sender's retries do not lock out another", async () => {
+    vi.stubEnv('SALARY_INTAKE_USER_HOURLY', '1');
+    vi.stubEnv('SALARY_INTAKE_DAILY_LIMIT', '2');
+    const { db, tg, reader, handleUpdate } = await setup();
+
+    for (const messageId of [10, 11, 12, 13]) await handleUpdate(photoUpdate({ messageId }));
+
+    expect(reader).toHaveBeenCalledTimes(1);
+    const mine = db.pendingIncomes.filter((r) => r.userId === 'u1');
+    expect(mine.map((r) => r.status)).toEqual(['OPEN', 'CANCELLED', 'CANCELLED', 'CANCELLED']);
+    expect(tg.sent.filter((s) => s.msg.text === notice('tooMany')).map((s) => s.replyTo)).toEqual([11, 12, 13]);
+
+    await handleUpdate(photoUpdate({ messageId: 20, fromId: 222 }));
+
+    expect(reader).toHaveBeenCalledTimes(2);
+    expect(db.pendingIncomes.find((r) => r.userId === 'u2')!.status).toBe('OPEN');
+  });
+
+  it('a sender who keeps retrying is read again once their last read is an hour old', async () => {
+    vi.stubEnv('SALARY_INTAKE_USER_HOURLY', '1');
+    const { reader, handleUpdate } = await setup();
+    const startedAt = Date.now();
+
+    await handleUpdate(photoUpdate({ messageId: 10 }));
+    for (const [i, minutes] of [20, 40, 59].entries()) {
+      vi.setSystemTime(startedAt + minutes * 60_000);
+      await handleUpdate(photoUpdate({ messageId: 11 + i }));
+    }
+    expect(reader).toHaveBeenCalledTimes(1);
+
+    vi.setSystemTime(startedAt + 61 * 60_000);
+    await handleUpdate(photoUpdate({ messageId: 20 }));
+
+    expect(reader).toHaveBeenCalledTimes(2);
+  });
+
+  it('a refused screenshot stays claimed, so its redelivery is still ignored', async () => {
+    vi.stubEnv('SALARY_INTAKE_USER_HOURLY', '1');
+    const { db, tg, reader, handleUpdate } = await setup();
+    await handleUpdate(photoUpdate({ messageId: 10 }));
+    const refused = photoUpdate({ messageId: 11 });
+    await handleUpdate(refused);
+    const sent = tg.sent.length, edited = tg.edited.length;
+
+    await handleUpdate(refused);
+
+    expect(db.pendingIncomes.filter((r) => r.sourceMessageId === 11)).toHaveLength(1);
+    expect(reader).toHaveBeenCalledTimes(1);
+    expect(tg.sent).toHaveLength(sent);
+    expect(tg.edited).toHaveLength(edited);
   });
 });
 

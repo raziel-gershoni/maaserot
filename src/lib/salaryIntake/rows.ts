@@ -105,7 +105,8 @@ export async function deleteStaleRows(userId: string, now: Date): Promise<void> 
 
 /**
  * Whether reading one more screenshot would go over a limit. The row just
- * claimed is already counted, so a limit of 10 lets the 10th through.
+ * claimed is already counted, so a limit of 10 lets the 10th through. A row
+ * the quota refuses then leaves the counts; see refuseForQuota.
  */
 export async function quotaExceeded(userId: string, now: Date): Promise<boolean> {
   const since = (ms: number) => ({ gt: new Date(now.getTime() - ms) });
@@ -142,6 +143,22 @@ export async function finishReading(id: string, data: RowData & { status: 'OPEN'
       ...(data.status === 'CANCELLED' && { candidates: [] }),
       version: { increment: 1 },
     },
+  });
+  return count;
+}
+
+/**
+ * Ends a read the quota refused, and takes the row out of the quota counts.
+ * A refusal downloads and reads nothing, so it costs nothing; counted, one
+ * sender's retries could fill the global limit and turn every user away for a
+ * day, and keep their own hour full for as long as they kept retrying. The
+ * row itself stays: a redelivery or a later photo of the same album must
+ * still conflict with it and stop quietly.
+ */
+export async function refuseForQuota(id: string): Promise<number> {
+  const { count } = await prisma.pendingIncome.updateMany({
+    where: { id, status: 'READING' },
+    data: { status: 'CANCELLED', viaImage: false, candidates: [], version: { increment: 1 } },
   });
   return count;
 }

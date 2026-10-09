@@ -20,6 +20,7 @@ import {
   finishReading,
   getRow,
   quotaExceeded,
+  refuseForQuota,
   setCardMessage,
 } from './rows';
 
@@ -107,7 +108,11 @@ export async function handleImage(ctx: Ctx, message: TgMessage): Promise<void> {
 
   try {
     await deleteStaleRows(sender.id, now);
-    if (await quotaExceeded(sender.id, now)) return await cancelWith(notice('tooMany'));
+    if (await quotaExceeded(sender.id, now)) {
+      // Not cancelWith: a refused row must also stop counting toward the quota.
+      await refuseForQuota(row.id);
+      return await say(notice('tooMany'));
+    }
 
     try {
       await sendChatAction(chatId, 'typing');
