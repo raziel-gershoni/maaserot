@@ -107,7 +107,7 @@ Telegram ──POST──▶ webhook route ── 401 unless secret matches
 
 | File | Purpose | Depends on |
 |---|---|---|
-| `src/lib/israelTime.ts` | Pure. `israelDate(instant) → 'YYYY-MM-DD'`, `israelMonth(instant) → 'YYYY-MM'`, `addDays(ymd, n)`, `addMonths(ym, n)`, `monthsBetween(a, b)`. Uses `Intl.DateTimeFormat(…, { timeZone: 'Asia/Jerusalem' }).formatToParts`, never a fixed offset. | `Intl` |
+| `src/lib/israelTime.ts` | Pure. `israelDate(instant) → 'YYYY-MM-DD'`, `israelMonth(instant) → 'YYYY-MM'`, `addDays(ymd, n)`, `addMonths(ym, n)`, `isRealDate(y, m, d)`, `toYmd(y, m, d)`, `monthLabel(month, locale, style)`. Uses `Intl.DateTimeFormat(…, { timeZone: 'Asia/Jerusalem' }).formatToParts`, never a fixed offset. | `Intl` |
 | `src/lib/calculations.ts` (changed) | `getCurrentMonth = () => israelMonth(new Date())`. New `maaserFor(amount, percent)` holding the existing expression verbatim. | `israelTime` |
 | `src/lib/depositParsing.ts` | Pure. `parseAmount(text, direction)`, `resolveDate(parts, sentAt)`, `toCandidates(reading, sentAt)`. | `israelTime` |
 | `src/lib/depositReader.ts` | The only module that calls Claude. `readDeposits(image, mediaType, deadline)` returns a discriminated result. | `@anthropic-ai/sdk` |
@@ -189,7 +189,11 @@ No one runs a migration against any database by hand.
 
 `handleUpdate`:
 - Ignores updates whose chat is not `private`.
-- Resolves the sender by `telegramId`.
+- Resolves the sender by `telegramId`. If that lookup fails (a database
+  error), nothing has been answered yet, so the update still gets a reply in
+  Telegram's language: a tap the toast "Couldn't check that right now — try
+  again in a minute", a screenshot the read error, an amount the save error,
+  and `/start` its welcome, which needs no account.
 - Never throws. Errors are logged in the restricted form described under
   Security and privacy.
 - Sends an **unknown sender** the message "I only know accounts that sign in
@@ -218,8 +222,10 @@ No one runs a migration against any database by hand.
      stop quietly. Production detects it as error code `P2002`.
    - A conflict on `(chatId, mediaGroupId)` means a later item of the same
      album: stop quietly. Only the first item is read.
-   - Also delete this user's rows whose `expiresAt` is more than 7 days past.
-     That is cleanup without a cron job.
+   - Also delete every row whose `expiresAt` is more than 7 days past,
+     whoever it belongs to: an untapped card keeps its unchosen lines, and
+     its owner may never send another screenshot. A typed card (§5) sweeps
+     the same way. That is cleanup without a cron job.
 3. **Quota.** The new row is counted too.
    - The user's `viaImage` rows over the last hour must be at most
      `SALARY_INTAKE_USER_HOURLY` (default 10), and over the last 24 h at most
@@ -238,7 +244,8 @@ No one runs a migration against any database by hand.
 5. **Download.**
    - `getFile`.
    - If `file_size` is over 7.5 MB, refuse with "Image too large — send it as
-     a photo".
+     a photo". The same when Telegram did not state the size and the
+     download runs over it.
    - Download into memory. The buffer is dropped at the end of the request.
 6. **Read.** `readDeposits(buffer, mediaType, deadline)`, as described in
    Claude call below.
@@ -352,7 +359,9 @@ Reply with a number to fix the amount.
   - The comparison is the sender and their accepted partner, against an
     `Income` in the card's month or the month after it.
   - It matches when the amount is within ₪1 (`|Δ| ≤ 100` agorot).
-  - It names who added the match and in which month.
+  - It names who added the match and in which month. The sender's own
+    match is named first, then the newest; a partner with no name is "your
+    partner".
   - It also counts the user's other `OPEN` cards with the same amount and
     month ("you have another open card for …").
 - **Paid warning:** shown when any `GroupPaymentSnapshot` for the card's month
@@ -414,6 +423,7 @@ For every tap:
    | Case | Toast text | What happens next |
    |---|---|---|
    | Undecodable data, or no row | "This card is no longer valid" | stop |
+   | The row cannot be loaded (database error) | "Couldn't check that right now — try again in a minute" | stop |
    | `row.userId ≠ sender.id`, or `row.chatId ≠ chat.id` | "Not yours" | stop |
    | `APPROVED` | "Already added" | render the final state from the database |
    | `CANCELLED` | "Cancelled" | render the final state from the database |
@@ -462,11 +472,11 @@ const result = await prisma.$transaction(async (tx) => {
 
 | Result | What happens |
 |---|---|
-| `added` | Render the Added final state, then `await notifyPartnerOfIncome(userId, month, amount)`. |
+| `added` | Render the Added final state, then `await notifyPartnerOfIncome(userId, month, amount)`. The notification runs even when the render fails: the Income is committed either way. |
 | `duplicate` | Bump the version, then re-render the card with the duplicate warning and `✅ Add anyway`. |
 | `stale` | Re-read and render. |
 | Transaction throws | Edit the card to add "⚠ Couldn't save — tap ✅ again", keeping the buttons. The row stays `OPEN` because the transaction rolled back. |
-| `IncomeError` (e.g. `defaultPercent` 0) | Final message: "Check your default percentage in Settings". Not "tap again". |
+| `IncomeError` (e.g. `defaultPercent` 0) | Final message: the row is cancelled and the card shows Cancelled, then "Check your default percentage in Settings, then send the screenshot or the amount again". Not "tap again": the row keeps the percentage it was picked at, so ✅ could only fail the same way. |
 
 ### 5. Text messages
 
@@ -476,7 +486,9 @@ const result = await prisma.$transaction(async (tx) => {
 - **`/start`:** handled as in Flow 1.
 - **An amount sent as a reply to a bot message.** Find the row with
   `{ userId, chatId, cardMessageId: reply_to_message.message_id }`, in any
-  status. **A reply never falls through to another row.**
+  status. **A reply never falls through to another row.** A reply to the
+  user's own message (their screenshot, say) is not a reply to a bot
+  message: it is an amount not sent as a reply.
 
   | Row found | What happens |
   |---|---|
@@ -602,7 +614,7 @@ const result = await prisma.$transaction(async (tx) => {
 | Redelivered update / later album item | nothing | unchanged |
 | Quota exceeded | "Too many screenshots — try again later" | row `CANCELLED`, `viaImage` false (not counted) |
 | Unsupported file | "Send a screenshot (photo)" | no row |
-| Image over 7.5 MB | "Image too large — send it as a photo" | row `CANCELLED` |
+| Image over 7.5 MB (stated, or found while downloading) | "Image too large — send it as a photo" | row `CANCELLED` |
 | `notConfigured` | "Reading screenshots isn't set up yet — type the amount instead." | row `CANCELLED` |
 | `error` (API, network, timeout, deadline, download failure) | "Couldn't read that right now — try again in a minute, or type the amount." | row `CANCELLED` |
 | `tooLong` | "That screenshot has too many lines — crop it to the deposit and send it again." | row `CANCELLED` |
@@ -611,6 +623,9 @@ const result = await prisma.$transaction(async (tx) => {
 | Re-sent screenshot | "Already got this one ↑" / "Already added ✅" | new row `CANCELLED` |
 | Tap problems | the single toast in Flow 4 step 2 | as listed |
 | Approve transaction throws | card edited with "⚠ Couldn't save — tap ✅ again", buttons kept | row stays `OPEN` |
+| `IncomeError` on approve | card shows Cancelled, then "Check your default percentage in Settings, then send the screenshot or the amount again" | row `CANCELLED` |
+| A typed amount fails (database, render, Telegram or deadline) | "Couldn't save that right now — try again in a minute." | as left by the failure; a row that was written stays |
+| Database error before an update was answered (loading the sender or the tapped row) | the toast "Couldn't check that right now — try again in a minute", or for a message its handler's error (see Flow 1) | unchanged |
 | `answerCallbackQuery` fails | logged, ignored | — |
 | `editMessageText` "message is not modified" | ignored | — |
 
