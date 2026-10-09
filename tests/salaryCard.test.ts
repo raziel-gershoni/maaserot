@@ -224,6 +224,18 @@ describe('renderCard text', () => {
     expect(renderCard(card({ depositDate: '2026-08-30', today: '2026-10-09' })).text).not.toContain('check the date');
   });
 
+  // A typed amount files by the day it was sent, with dateFromImage false (spec §5), so its
+  // card shows the no-date line too. The spec mock's "No date in the image" would be false there.
+  it('words the no-date line so it also holds for a typed card, which has no image', () => {
+    const info = (locale: CardView['locale']) =>
+      lines(card({ locale, dateFromImage: false, description: defaultDescription(locale) }))
+        .find((l) => l.includes('ℹ'));
+    expect(info('en')).toContain('used the day you sent it');
+    expect(info('en')).not.toMatch(/image|screenshot|photo/i);
+    expect(info('he')).toContain('השתמשתי ביום שבו שלחת');
+    expect(info('he')).not.toMatch(/תמונה|צילום/);
+  });
+
   it('orders the lines: title, amount, month, warnings, info, save failure, hint', () => {
     const all = lines(card({
       duplicate: { name: null, month: '2026-10', amount: 1 },

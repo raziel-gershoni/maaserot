@@ -190,6 +190,7 @@ export function renderCard(v: CardView): OutgoingMessage {
     lines.push(t('card.warnOldDate', { months: monthsApart(v.depositDate.slice(0, 7), v.today.slice(0, 7)) }));
   }
   if (v.directionUnknown) lines.push(t('card.warnDirection'));
+  // Typed cards land here too (spec §5), so the line must not speak of an image.
   if (!v.dateFromImage) lines.push(t('card.infoNoDate'));
   if (v.saveFailed) lines.push(t('card.saveFailed'));
   lines.push(t('card.hintReply'));
