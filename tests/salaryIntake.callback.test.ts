@@ -186,6 +186,27 @@ describe('✅ Add', () => {
     expect(errors.mock.calls).toEqual([['[salaryIntake:notify]', 'Error', 'P1001', update.update_id, row.id]]);
   });
 
+  // Success criterion 3: the Income is in, so the partner hears of it even
+  // when the user's own screen could not be updated.
+  it('an Added edit that fails still notifies the partner, after it, and the failure is logged', async () => {
+    const row = cardRow();
+    const { db, tg, notify, handleUpdate } = await setup({ pendingIncomes: [row] });
+    const { TelegramError } = await import('@/lib/telegramBot');
+    tg.editMessageText.mockRejectedValueOnce(new TelegramError('editMessageText', 'Bad Gateway', 502));
+    const errors = silenceErrors();
+    const update = tap(row, 'a', 1);
+
+    await handleUpdate(update);
+
+    expect(db.incomes).toHaveLength(1);
+    expect(rowOf(db, row.id).status).toBe('APPROVED');
+    expect(notify).toHaveBeenCalledTimes(1);
+    expect(notify).toHaveBeenCalledWith('u1', '2026-10', 1234567);
+    // The render is still tried first.
+    expect(tg.editMessageText.mock.invocationCallOrder[0]).toBeLessThan(notify.mock.invocationCallOrder[0]);
+    expect(errors.mock.calls).toEqual([['[salaryIntake:update]', 'TelegramError', 502, update.update_id, undefined]]);
+  });
+
   it('on a message that is not the row\'s card: Added goes on the card, and the tapped message points to it', async () => {
     const row = cardRow();
     const { db, tg, handleUpdate } = await setup({ pendingIncomes: [row] });
@@ -282,16 +303,49 @@ describe('✅ when it cannot add', () => {
     expect(rowOf(db, row.id).status).toBe('APPROVED');
   });
 
-  it('a card picked at a default percentage of 0 sends "check your percentage", not "tap again"', async () => {
+  // The row keeps the percentage it was picked at, so a ✅ after Settings is
+  // fixed would fail the same way: the card is closed instead (spec §4).
+  it('a card picked at a default percentage of 0 is closed, with "check your percentage", not "tap again"', async () => {
     const row = cardRow({ percentage: 0 });
-    const { db, tg, handleUpdate } = await setup({ pendingIncomes: [row] });
+    const { db, tg, handleUpdate } = await setup({
+      pendingIncomes: [row],
+      users: [{ ...u1, defaultPercent: 0 }, { ...u2 }],
+    });
+    const errors = silenceErrors();
 
     await handleUpdate(tap(row, 'a', 1));
 
     expect(db.incomes).toHaveLength(0);
-    expect(rowOf(db, row.id)).toMatchObject({ status: 'OPEN', version: 1 });
+    expect(rowOf(db, row.id)).toMatchObject({ status: 'CANCELLED', version: 2, candidates: [] });
+    expect(screen(tg)).toEqual(renderCancelled({ locale: 'he', amount: 1234567 }));
+    expect(taps(screen(tg))).toEqual([]);
     expect(tg.sent.map((s) => s.msg)).toEqual([renderNotice('he', 'checkPercent')]);
+    expect(renderNotice('en', 'checkPercent').text).toMatch(/send the screenshot or the amount again/);
     expect(tg.edited.map((e) => e.msg.text).join('\n')).not.toContain(he.bot.card.saveFailed);
+    // Expected, not a fault: nothing is logged.
+    expect(errors).not.toHaveBeenCalled();
+
+    // Settings fixed, the old card cannot be used again: it says it was cancelled.
+    db.users.find((u) => u.id === 'u1')!.defaultPercent = 10;
+    await handleUpdate(tap(row, 'a', 1));
+
+    expect(db.incomes).toHaveLength(0);
+    expect(tg.answered.map((a) => a.text)).toEqual([undefined, toast('cancelled')]);
+  });
+
+  it('a card at a percentage of 0 that cannot be edited still gets "check your percentage"', async () => {
+    const row = cardRow({ percentage: 0 });
+    const { db, tg, handleUpdate } = await setup({ pendingIncomes: [row] });
+    const { TelegramError } = await import('@/lib/telegramBot');
+    tg.editMessageText.mockRejectedValueOnce(new TelegramError('editMessageText', 'Bad Gateway', 502));
+    const errors = silenceErrors();
+    const update = tap(row, 'a', 1);
+
+    await handleUpdate(update);
+
+    expect(rowOf(db, row.id).status).toBe('CANCELLED');
+    expect(tg.sent.map((s) => s.msg)).toEqual([renderNotice('he', 'checkPercent')]);
+    expect(errors.mock.calls).toEqual([['[salaryIntake:update]', 'TelegramError', 502, update.update_id, undefined]]);
   });
 });
 
@@ -504,5 +558,56 @@ describe('taps that are refused', () => {
     expect(db.incomes).toHaveLength(0);
     expect(tg.edited.map((e) => e.messageId)).toEqual([500]);
     expect(screen(tg, 500)).toEqual(renderUpdatedPointer('he'));
+  });
+});
+
+describe('a database that fails before the tap is answered', () => {
+  /** Shaped as Prisma's are. Its message names the server, so it must never reach a log. */
+  const dbError = () =>
+    Object.assign(new Error('Timed out fetching a new connection from the pool at db.internal:5432'), {
+      name: 'PrismaClientKnownRequestError',
+      code: 'P2024',
+    });
+  type Method = (...args: never[]) => Promise<unknown>;
+  const fakeClient = async () =>
+    ((await import('@/lib/prisma')) as unknown as {
+      prisma: { pendingIncome: { findUnique: Method }; user: { findUnique: Method } };
+    }).prisma;
+
+  it('loading the row → the tap is still answered, once, with "couldn\'t check", and nothing changes', async () => {
+    const row = cardRow();
+    const { db, tg, handleUpdate } = await setup({ pendingIncomes: [row] });
+    vi.spyOn((await fakeClient()).pendingIncome, 'findUnique').mockRejectedValueOnce(dbError());
+    const errors = silenceErrors();
+    const before = structuredClone(db.pendingIncomes);
+    const update = tap(row, 'a', 1);
+
+    await handleUpdate(update);
+
+    expect(tg.answered).toEqual([{ id: update.callback_query!.id, text: toast('error') }]);
+    expect(db.pendingIncomes).toEqual(before);
+    expect(db.incomes).toHaveLength(0);
+    expect(tg.edited).toHaveLength(0);
+    expect(tg.sent).toHaveLength(0);
+    expect(errors.mock.calls).toEqual([
+      ['[salaryIntake:callback]', 'PrismaClientKnownRequestError', 'P2024', update.update_id, row.id],
+    ]);
+  });
+
+  it("loading the sender → the tap is still answered, once, in Telegram's language", async () => {
+    const row = cardRow();
+    const { db, tg, handleUpdate } = await setup({ pendingIncomes: [row] });
+    vi.spyOn((await fakeClient()).user, 'findUnique').mockRejectedValueOnce(dbError());
+    const errors = silenceErrors();
+    const update = tapUpdate({ data: encodeCallback({ action: 'a', id: row.id, version: 1 }), messageId: 500, languageCode: 'en' });
+
+    await handleUpdate(update);
+
+    expect(tg.answered).toEqual([{ id: update.callback_query!.id, text: toastText('en', 'error') }]);
+    expect(db.incomes).toHaveLength(0);
+    expect(tg.sent).toHaveLength(0);
+    expect(errors.mock.calls).toEqual([
+      ['[salaryIntake:update]', 'PrismaClientKnownRequestError', 'P2024', update.update_id, undefined],
+    ]);
   });
 });

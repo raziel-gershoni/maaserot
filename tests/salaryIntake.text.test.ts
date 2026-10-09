@@ -550,3 +550,45 @@ describe('an amount that fails partway', () => {
     expect(errors.mock.calls).toEqual([line, line]);
   });
 });
+
+describe('an account that cannot be loaded', () => {
+  /** Makes the next sender lookup fail as a database outage does. Call after setup(). */
+  async function failSenderLookup() {
+    const { prisma } = (await import('@/lib/prisma')) as unknown as {
+      prisma: { user: { findUnique: (...args: never[]) => Promise<unknown> } };
+    };
+    vi.spyOn(prisma.user, 'findUnique').mockRejectedValueOnce(
+      Object.assign(new Error('pool timeout at db.internal'), { code: 'P2024' })
+    );
+    return vi.spyOn(console, 'error').mockImplementation(() => {});
+  }
+
+  // Nothing has been answered yet when the sender is looked up, so a database
+  // failure there must still end in a reply (spec success criterion 2).
+  it.each([
+    ['an amount', () => textUpdate({ text: '12,500', messageId: 600, languageCode: 'en' }), 'saveError'],
+    ['a screenshot', () => photoUpdate({ messageId: 600, languageCode: 'en' }), 'readError'],
+  ] as const)("%s → its handler's error, in Telegram's language, and no row", async (_, update, key) => {
+    const { db, tg, reader, handleUpdate } = await setup();
+    const errors = await failSenderLookup();
+    const u = update();
+
+    await handleUpdate(u);
+
+    expect(db.pendingIncomes).toHaveLength(0);
+    expect(reader).not.toHaveBeenCalled();
+    expect(tg.sent).toEqual([{ chatId: BigInt(111), replyTo: 600, msg: notice(key, 'en') }]);
+    expect(errors.mock.calls).toEqual([['[salaryIntake:update]', 'Error', 'P2024', u.update_id, undefined]]);
+  });
+
+  it('/start → the welcome all the same, which needs no account', async () => {
+    const { tg, handleUpdate } = await setup();
+    await failSenderLookup();
+
+    await handleUpdate(textUpdate({ text: '/start', messageId: 600, languageCode: 'en' }));
+
+    expect(tg.sent).toHaveLength(1);
+    expect(tg.sent[0].msg.text).toBe(notice('welcome', 'en').text);
+    expect(webAppUrls(tg.sent[0].msg)[0]).toMatch(/\/tg$/);
+  });
+});

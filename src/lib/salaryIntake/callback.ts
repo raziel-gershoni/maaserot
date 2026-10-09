@@ -36,15 +36,18 @@ export async function handleCallback(ctx: Ctx, query: TgCallbackQuery): Promise<
   // card has expired and which months it may move to.
   const now = ctx.now();
   const tap = decodeCallback(query.data);
-  const row = tap ? await getRow(tap.id) : null;
-  const { toast, next } = triage(ctx, tap, row, now);
-
+  let row: Row | null;
   try {
-    await answerCallbackQuery(query.id, toast ? toastText(ctx.sender.locale, toast) : undefined);
+    row = tap ? await getRow(tap.id) : null;
   } catch (err) {
-    // The spinner times out by itself; the tap still counts.
-    logError('callback', err, { updateId: ctx.updateId, pendingId: row?.id });
+    // The database failed before the tap was answered. The answer is still
+    // owed: without one the spinner just stops, and the user cannot tell a
+    // tap that failed from one that did nothing.
+    logError('callback', err, { updateId: ctx.updateId, pendingId: tap?.id });
+    return answerTap(ctx, query, 'error');
   }
+  const { toast, next } = triage(ctx, tap, row, now);
+  await answerTap(ctx, query, toast, row?.id);
 
   // index.ts takes a tap's chat from its message, so the message is always there.
   if (next === 'stop' || !tap || !row || !query.message) return;
@@ -52,6 +55,16 @@ export async function handleCallback(ctx: Ctx, query: TgCallbackQuery): Promise<
   if (next === 'final') return showRow(ctx, tapped, row);
   if (next === 'stale') return showStale(ctx, tapped, row);
   await act(ctx, tap, row, tapped, now);
+}
+
+/** The tap's one answer (spec §4 step 2). A failed answer is logged and never stops the handler. */
+async function answerTap(ctx: Ctx, query: TgCallbackQuery, toast: BotToastKey | null, pendingId?: string): Promise<void> {
+  try {
+    await answerCallbackQuery(query.id, toast ? toastText(ctx.sender.locale, toast) : undefined);
+  } catch (err) {
+    // The spinner times out by itself; the tap still counts.
+    logError('callback', err, { updateId: ctx.updateId, pendingId });
+  }
 }
 
 function triage(ctx: Ctx, tap: CallbackData | null, row: Row | null, now: Date): { toast: BotToastKey | null; next: Next } {
@@ -131,12 +144,7 @@ async function approveTap(ctx: Ctx, action: 'a' | 'A', row: Row, tapped: number,
   try {
     result = await approve({ id: row.id, userId: sender.id, version: row.version, action, now });
   } catch (err) {
-    if (err instanceof IncomeError) {
-      // The card's own values cannot be recorded (a legacy percentage of 0),
-      // so "tap again" would fail the same way every time.
-      await sendMessage(ctx.chatId, renderNotice(sender.locale, 'checkPercent'), { deadline: ctx.deadline });
-      return;
-    }
+    if (err instanceof IncomeError) return closeUnrecordable(ctx, row, tapped, now);
     logError('approve', err, ids);
     // Rolled back, so the row is still the card that was tapped, buttons and all.
     await showChange(ctx, tapped, row, { saveFailed: true });
@@ -146,16 +154,39 @@ async function approveTap(ctx: Ctx, action: 'a' | 'A', row: Row, tapped: number,
   // A version bump with no change: the ✅ just tapped cannot be replayed past
   // the warning, which the card now shows, with "Add anyway".
   if (result.kind === 'duplicate') await updateOpen(row.id, sender.id, row.version, now, {});
-  const fresh = await getRow(row.id);
-  if (fresh) await showChange(ctx, tapped, fresh);
-
-  if (result.kind === 'added') {
-    try {
-      await notifyPartnerOfIncome(sender.id, result.income.month, result.income.amount);
-    } catch (err) {
-      // The income is in; the partner still sees it in the app.
-      logError('notify', err, ids);
+  try {
+    const fresh = await getRow(row.id);
+    if (fresh) await showChange(ctx, tapped, fresh);
+  } finally {
+    // The Income is committed whatever the screen did. A failed edit (Telegram,
+    // the deadline, the Added line's reckoning) must not also cost the partner
+    // their message; it is still logged, by handleUpdate, once this is done.
+    if (result.kind === 'added') {
+      try {
+        await notifyPartnerOfIncome(sender.id, result.income.month, result.income.amount);
+      } catch (err) {
+        // The income is in; the partner still sees it in the app.
+        logError('notify', err, ids);
+      }
     }
+  }
+}
+
+/**
+ * The card's own values cannot be recorded: a legacy `defaultPercent` of 0,
+ * captured when the deposit was picked. "Tap again" would fail the same way
+ * every time, even after Settings is fixed, since the row keeps the percentage
+ * it was picked at. So the card is closed, and the user is told to fix
+ * Settings and send the deposit again (spec §4, "Final message").
+ */
+async function closeUnrecordable(ctx: Ctx, row: Row, tapped: number, now: Date): Promise<void> {
+  try {
+    await cancelOpen(row.id, ctx.sender.id, row.version, now);
+    const fresh = await getRow(row.id);
+    if (fresh) await showChange(ctx, tapped, fresh);
+  } finally {
+    // The one word of why: sent even when the card could not be closed or edited.
+    await sendMessage(ctx.chatId, renderNotice(ctx.sender.locale, 'checkPercent'), { deadline: ctx.deadline });
   }
 }
 

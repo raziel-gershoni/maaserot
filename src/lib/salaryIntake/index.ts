@@ -1,7 +1,7 @@
-import { localeFor, renderNotice } from '../salaryCard';
+import { localeFor, renderNotice, toastText, type Locale } from '../salaryCard';
 import { answerCallbackQuery, sendMessage, type TgUpdate } from '../telegramBot';
 import { handleCallback } from './callback';
-import { appUrl, loadSender, logError, type Ctx } from './context';
+import { appUrl, loadSender, logError, type Ctx, type Sender } from './context';
 import { handleImage, imageFileOf } from './image';
 import { handleStart, handleText } from './text';
 
@@ -29,7 +29,13 @@ export async function handleUpdate(update: TgUpdate, deadline: number): Promise<
     if (!chat || chat.type !== 'private' || !from) return;
 
     const chatId = BigInt(chat.id);
-    const sender = await loadSender(from.id);
+    let sender: Sender | null;
+    try {
+      sender = await loadSender(from.id);
+    } catch (err) {
+      logError('update', err, { updateId: update.update_id });
+      return await unavailable(update, chatId, localeFor(null, from.language_code), deadline);
+    }
     const locale = sender?.locale ?? localeFor(null, from.language_code);
 
     if (message && isStart(message.text)) return await handleStart(chatId, locale, deadline);
@@ -58,4 +64,20 @@ export async function handleUpdate(update: TgUpdate, deadline: number): Promise<
   } catch (err) {
     logError('update', err, { updateId: (update as TgUpdate | null)?.update_id });
   }
+}
+
+/**
+ * The database failed before the sender was known, so before anything was
+ * answered. The update still gets its reply (spec success criterion 2), in
+ * Telegram's language since the account's is unknown: a tap its one answer, a
+ * screenshot or an amount the error its own handler gives when it fails, and
+ * /start its welcome, which needs no account.
+ */
+async function unavailable(update: TgUpdate, chatId: bigint, locale: Locale, deadline: number): Promise<void> {
+  const { message, callback_query: query } = update;
+  if (query) return answerCallbackQuery(query.id, toastText(locale, 'error'));
+  if (!message) return;
+  if (isStart(message.text)) return handleStart(chatId, locale, deadline);
+  const key = imageFileOf(message) ? 'readError' : message.text !== undefined ? 'saveError' : 'unsupportedFile';
+  await sendMessage(chatId, renderNotice(locale, key), { replyTo: message.message_id, deadline });
 }

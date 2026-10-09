@@ -396,7 +396,7 @@
       "staleReply": "Reply to the newest card to change its amount.",
       "hint": "Send me a screenshot of a salary deposit, or type the amount.",
       "unsupportedFile": "Send a screenshot (photo).",
-      "checkPercent": "Check your default percentage in Settings.",
+      "checkPercent": "Check your default percentage in Settings, then send the screenshot or the amount again.",
       "alreadyAddedReply": "Already added to {month}. Edit it in the app."
     },
     "toast": {
@@ -406,7 +406,8 @@
       "cancelled": "Cancelled",
       "stillReading": "Still reading — one moment",
       "expired": "Expired — send the screenshot again",
-      "changed": "The card changed — check it and tap again"
+      "changed": "The card changed — check it and tap again",
+      "error": "Couldn't check that right now — try again in a minute"
     },
     "button": {
       "openApp": "📊 Open in the app",
