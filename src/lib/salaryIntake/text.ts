@@ -33,17 +33,32 @@ import {
 
 export async function handleText(ctx: Ctx, message: TgMessage): Promise<void> {
   const { sender, chatId } = ctx;
-  const amount = parseAmount((message.text ?? '').trim(), 'in');
-  if (amount === null) return say(ctx, message, renderNotice(sender.locale, 'hint'));
+  // Every return awaits, so a failure anywhere below reaches the catch.
+  try {
+    const amount = parseAmount((message.text ?? '').trim(), 'in');
+    if (amount === null) return await say(ctx, message, renderNotice(sender.locale, 'hint'));
 
-  // One clock for the checks and the write, so they agree on whether the card has expired.
-  const now = ctx.now();
-  const replyTo = message.reply_to_message?.message_id;
-  const row =
-    replyTo !== undefined ? await rowForReply(sender.id, chatId, replyTo) : await newestOpenRow(sender.id, chatId, now);
-  if (row) return setAmount(ctx, message, row, amount, now);
-  if (replyTo !== undefined) return say(ctx, message, answer(sender.locale, null, now));
-  await startCard(ctx, message, amount, now);
+    // One clock for the checks and the write, so they agree on whether the card has expired.
+    const now = ctx.now();
+    const replyTo = message.reply_to_message?.message_id;
+    const row =
+      replyTo !== undefined ? await rowForReply(sender.id, chatId, replyTo) : await newestOpenRow(sender.id, chatId, now);
+    if (row) return await setAmount(ctx, message, row, amount, now);
+    if (replyTo !== undefined) return await say(ctx, message, answer(sender.locale, null, now));
+    await startCard(ctx, message, amount, now);
+  } catch (err) {
+    // The database, a render, Telegram or the deadline failed. handleUpdate
+    // would only log it, and the user, seeing no card, would not know to
+    // send the amount again.
+    logError('text', err, { updateId: ctx.updateId });
+    try {
+      // Not held to the deadline, which may be what just ran out: the time
+      // between it and maxDuration is kept for this reply.
+      await sendMessage(chatId, renderNotice(sender.locale, 'saveError'), { replyTo: message.message_id });
+    } catch (e) {
+      logError('text', e, { updateId: ctx.updateId });
+    }
+  }
 }
 
 /** For known and unknown senders alike, so there is no Ctx: only where to answer, and in which language. */
@@ -67,6 +82,13 @@ async function setAmount(ctx: Ctx, message: TgMessage, row: Row, amount: number,
     return say(ctx, message, answer(sender.locale, await getRow(row.id), now));
   }
 
+  // Rendered before the old card is touched. Should the render fail, the old
+  // card keeps its buttons and stays the row's card, so a tap there still
+  // finds the row and shows the new amount.
+  const fresh = await getRow(row.id);
+  if (!fresh) return;
+  const card = await rowMessage(fresh, sender, now);
+
   if (row.cardMessageId !== null) {
     try {
       await showPointer(ctx, row.cardMessageId);
@@ -76,8 +98,7 @@ async function setAmount(ctx: Ctx, message: TgMessage, row: Row, amount: number,
       logError('text', err, { updateId: ctx.updateId, pendingId: row.id });
     }
   }
-  const fresh = await getRow(row.id);
-  if (fresh) await sendCard(ctx, message, fresh, now);
+  await sendCard(ctx, message, fresh, card);
 }
 
 /** A number with no card to go to: a card of its own, with no Claude call and no quota. */
@@ -93,7 +114,7 @@ async function startCard(ctx: Ctx, message: TgMessage, amount: number, now: Date
   });
   // A redelivered update: the first delivery sent the card.
   if (!row) return;
-  await sendCard(ctx, message, row, now);
+  await sendCard(ctx, message, row, await rowMessage(row, sender, now));
 }
 
 /**
@@ -111,10 +132,9 @@ function typedFiling(sender: Sender, message: TgMessage) {
   };
 }
 
-/** Sends the row's card as a new message, and makes it the one replies and taps go to. */
-async function sendCard(ctx: Ctx, message: TgMessage, row: Row, now: Date): Promise<void> {
-  const msg = await rowMessage(row, ctx.sender, now);
-  const { message_id } = await sendMessage(ctx.chatId, msg, { replyTo: message.message_id, deadline: ctx.deadline });
+/** Sends the row's card, already rendered, as a new message, and makes it the one replies and taps go to. */
+async function sendCard(ctx: Ctx, message: TgMessage, row: Row, card: OutgoingMessage): Promise<void> {
+  const { message_id } = await sendMessage(ctx.chatId, card, { replyTo: message.message_id, deadline: ctx.deadline });
   if ((await setCardMessage(row.id, message_id, ['OPEN'])) === 0) {
     // A tap closed the row while its card was on the way: the card shows how it ended.
     const fresh = await getRow(row.id);

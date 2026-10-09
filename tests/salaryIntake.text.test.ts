@@ -420,3 +420,133 @@ describe('an amount that loses a race', () => {
     expect(tappedIds(screen(tg, FIRST_SENT_ID))).toEqual([]);
   });
 });
+
+describe('an amount that fails partway', () => {
+  type Method = (...args: never[]) => Promise<unknown>;
+  /** The fake client the flow runs against, so a test can make one of its calls fail. Call after setup(). */
+  const fakeClient = async () =>
+    (
+      (await import('@/lib/prisma')) as unknown as {
+        prisma: { pendingIncome: Record<'findFirst' | 'updateMany', Method>; groupPaymentSnapshot: { findFirst: Method } };
+      }
+    ).prisma;
+  /** Shaped as Prisma's are. Its message names the server, so it must never reach a log. */
+  const dbError = () =>
+    Object.assign(new Error("Timed out fetching a new connection from the pool at db.internal:5432"), {
+      name: 'PrismaClientKnownRequestError',
+      code: 'P2024',
+    });
+  const quiet = () => vi.spyOn(console, 'error').mockImplementation(() => {});
+
+  it.each([
+    ['reading the row', 'findFirst'],
+    ['writing the amount', 'updateMany'],
+  ] as const)("a database error %s → one notice, nothing changes, and the log has only the error's name and code", async (_, method) => {
+    const row = cardRow();
+    const { db, tg, handleUpdate } = await setup({ pendingIncomes: [row] });
+    vi.spyOn((await fakeClient()).pendingIncome, method).mockRejectedValueOnce(dbError());
+    const errors = quiet();
+    const before = structuredClone(db.pendingIncomes);
+    const update = textUpdate({ text: '12,500', messageId: 600, replyTo: 500 });
+
+    await handleUpdate(update);
+
+    expect(db.pendingIncomes).toEqual(before);
+    expect(tg.edited).toHaveLength(0);
+    expect(tg.sent).toEqual([{ chatId: BigInt(111), replyTo: 600, msg: notice('saveError') }]);
+    expect(errors.mock.calls).toEqual([
+      ['[salaryIntake:text]', 'PrismaClientKnownRequestError', 'P2024', update.update_id, undefined],
+    ]);
+  });
+
+  it('a new card that cannot be rendered leaves the old card as it was, and the user hears so', async () => {
+    const row = cardRow();
+    const { db, tg, handleUpdate } = await setup({ pendingIncomes: [row] });
+    // The card's month-paid check: a read the render makes after the amount is written.
+    vi.spyOn((await fakeClient()).groupPaymentSnapshot, 'findFirst').mockRejectedValueOnce(dbError());
+    const errors = quiet();
+    const update = textUpdate({ text: '12,500', messageId: 600, replyTo: 500 });
+
+    await handleUpdate(update);
+
+    // The amount is written; only showing it failed.
+    expect(rowOf(db, row.id)).toMatchObject({ status: 'OPEN', version: 2, amount: 1250000, cardMessageId: 500 });
+    // Not "↓ updated": message 500 is still the row's card, so it keeps its buttons.
+    expect(tg.edited).toHaveLength(0);
+    expect(tg.sent).toEqual([{ chatId: BigInt(111), replyTo: 600, msg: notice('saveError') }]);
+    expect(errors.mock.calls).toEqual([
+      ['[salaryIntake:text]', 'PrismaClientKnownRequestError', 'P2024', update.update_id, undefined],
+    ]);
+
+    // A tap there hears the card changed, records nothing, and sees the new amount.
+    await handleUpdate(tap(row, 'a', 1, 500));
+
+    expect(db.incomes).toHaveLength(0);
+    expect(tg.answered.map((a) => a.text)).toEqual([toastText('he', 'changed')]);
+    expect(screen(tg, 500)).toEqual(renderCard(cardView(rowOf(db, row.id))));
+  });
+
+  it('a typed card Telegram refuses → the notice; the row waits, and the next amount shows its card', async () => {
+    const { db, tg, handleUpdate } = await setup();
+    const { TelegramError } = await import('@/lib/telegramBot');
+    tg.sendMessage.mockRejectedValueOnce(new TelegramError('sendMessage', 'Bad Gateway', 502));
+    const errors = quiet();
+    const update = textUpdate({ text: '12,500', messageId: 600 });
+
+    await handleUpdate(update);
+
+    expect(db.pendingIncomes).toHaveLength(1);
+    const row = db.pendingIncomes[0];
+    expect(row).toMatchObject({ status: 'OPEN', version: 1, amount: 1250000, cardMessageId: null });
+    expect(tg.sent).toEqual([{ chatId: BigInt(111), replyTo: 600, msg: notice('saveError') }]);
+    expect(errors.mock.calls).toEqual([['[salaryIntake:text]', 'TelegramError', 502, update.update_id, undefined]]);
+
+    await handleUpdate(textUpdate({ text: '12,500', messageId: 601 }));
+
+    expect(db.pendingIncomes).toHaveLength(1);
+    expect(rowOf(db, row.id)).toMatchObject({ status: 'OPEN', version: 2, cardMessageId: FIRST_SENT_ID + 1 });
+    expect(tg.edited).toHaveLength(0);
+    expect(tg.sent.at(-1)).toEqual({ chatId: BigInt(111), replyTo: 601, msg: renderCard(cardView(rowOf(db, row.id))) });
+  });
+
+  it('a card the deadline stops → the notice, which is sent past the deadline', async () => {
+    const { tg, handleUpdate } = await setup();
+    const errors = quiet();
+    const update = textUpdate({ text: '12,500', messageId: 600 });
+
+    await handleUpdate(update, Date.now() - 1);
+
+    expect(tg.sent).toEqual([{ chatId: BigInt(111), replyTo: 600, msg: notice('saveError') }]);
+    // A DOMException's code: 23 is TIMEOUT_ERR.
+    expect(errors.mock.calls).toEqual([['[salaryIntake:text]', 'TimeoutError', 23, update.update_id, undefined]]);
+  });
+
+  it.each([
+    ['the hint', 'hello', undefined],
+    ['"reply to the newest card"', '12,500', 499],
+  ] as const)('%s Telegram refuses once → the notice in its place', async (_, text, replyTo) => {
+    const { tg, handleUpdate } = await setup({ pendingIncomes: [cardRow()] });
+    const { TelegramError } = await import('@/lib/telegramBot');
+    tg.sendMessage.mockRejectedValueOnce(new TelegramError('sendMessage', 'Bad Gateway', 502));
+    const errors = quiet();
+    const update = textUpdate({ text, messageId: 600, replyTo });
+
+    await handleUpdate(update);
+
+    expect(tg.sent).toEqual([{ chatId: BigInt(111), replyTo: 600, msg: notice('saveError') }]);
+    expect(errors.mock.calls).toEqual([['[salaryIntake:text]', 'TelegramError', 502, update.update_id, undefined]]);
+  });
+
+  it('when even the notice cannot be sent, both failures are only logged', async () => {
+    const { tg, handleUpdate } = await setup();
+    const { TelegramError } = await import('@/lib/telegramBot');
+    tg.sendMessage.mockRejectedValue(new TelegramError('sendMessage', 'Forbidden: bot was blocked by the user', 403));
+    const errors = quiet();
+    const update = textUpdate({ text: '12,500', messageId: 600 });
+
+    await expect(handleUpdate(update)).resolves.toBeUndefined();
+
+    const line = ['[salaryIntake:text]', 'TelegramError', 403, update.update_id, undefined];
+    expect(errors.mock.calls).toEqual([line, line]);
+  });
+});

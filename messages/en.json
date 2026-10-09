@@ -386,6 +386,7 @@
       "tooLarge": "Image too large — send it as a photo.",
       "notConfigured": "Reading screenshots isn't set up yet — type the amount instead.",
       "readError": "Couldn't read that right now — try again in a minute, or type the amount.",
+      "saveError": "Couldn't save that right now — try again in a minute.",
       "tooLong": "That screenshot has too many lines — crop it to the deposit and send it again.",
       "unreadable": "I couldn't read this image — send a clear screenshot of the deposit, or type the amount.",
       "alreadyGot": "Already got this one ↑",
