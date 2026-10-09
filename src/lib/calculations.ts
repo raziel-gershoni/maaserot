@@ -1,4 +1,10 @@
 import { FixedCharityData, MonthStateData } from '@/types';
+import { israelMonth } from './israelTime';
+
+/** The one maaser rounding rule. Every place that computes maaser calls this. */
+export function maaserFor(amount: number, percent: number): number {
+  return Math.round(amount * (percent / 100));
+}
 
 export function calculateMonthState(
   incomes: { amount: number; percentage: number }[],
@@ -6,7 +12,7 @@ export function calculateMonthState(
   isPaidAlready: boolean
 ): MonthStateData {
   const totalMaaser = incomes.reduce(
-    (sum, i) => sum + Math.round(i.amount * (i.percentage / 100)),
+    (sum, i) => sum + maaserFor(i.amount, i.percentage),
     0
   );
 
@@ -22,11 +28,9 @@ export function calculateMonthState(
   };
 }
 
+// Israel's month, not the server's: the server runs in UTC.
 export function getCurrentMonth(): string {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  return `${year}-${month}`;
+  return israelMonth(new Date());
 }
 
 export function formatCurrency(agorot: number, locale: string = 'he'): string {

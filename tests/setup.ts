@@ -5,3 +5,8 @@ import { config } from 'dotenv';
 // in-memory client in ./fakePrisma. That is what lets the suite run in CI
 // with no secrets, and what stopped it writing to a shared database.
 config();
+
+// The local .env holds live secrets; a test that needs one sets its own.
+delete process.env.TELEGRAM_BOT_TOKEN;
+delete process.env.TELEGRAM_WEBHOOK_SECRET;
+delete process.env.ANTHROPIC_API_KEY;

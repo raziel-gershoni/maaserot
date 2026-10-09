@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { getCurrentMonth } from '@/lib/calculations';
+import { getCurrentMonth, maaserFor } from '@/lib/calculations';
 import { apiError } from '../_lib/apiError';
 
 export async function GET() {
@@ -93,7 +93,7 @@ export async function PATCH(request: Request) {
       // Update each income with new percentage and recalculated maaser
       const newDefaultPercent = parseInt(defaultPercent);
       for (const income of currentMonthIncomes) {
-        const newMaaser = Math.round(income.amount * (newDefaultPercent / 100));
+        const newMaaser = maaserFor(income.amount, newDefaultPercent);
         await prisma.income.update({
           where: { id: income.id },
           data: {

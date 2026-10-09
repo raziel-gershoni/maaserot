@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { getCurrentMonth } from '@/lib/calculations';
+import { getCurrentMonth, maaserFor } from '@/lib/calculations';
 import { calculateGroupMonthState } from '@/lib/monthState';
 import { notifyPartnerIncomeAdded } from '@/lib/telegramNotify';
 import { apiError } from '../_lib/apiError';
@@ -45,7 +45,7 @@ export async function POST(request: Request) {
     }
 
     const month = getCurrentMonth();
-    const maaser = Math.round(amount * (percentage / 100));
+    const maaser = maaserFor(amount, percentage);
 
     // Create income
     const income = await prisma.income.create({
@@ -136,7 +136,7 @@ export async function PATCH(request: Request) {
     // Calculate new maaser if amount or percentage changed
     const newAmount = amount ?? existingIncome.amount;
     const newPercentage = percentage ?? existingIncome.percentage;
-    const maaser = Math.round(newAmount * (newPercentage / 100));
+    const maaser = maaserFor(newAmount, newPercentage);
 
     // Update income
     await prisma.income.update({

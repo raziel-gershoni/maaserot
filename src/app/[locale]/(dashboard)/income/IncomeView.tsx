@@ -12,6 +12,7 @@ import { useSearchParams } from 'next/navigation';
 import { Link, useRouter } from '@/i18n/routing';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import MonthNavigator from '@/components/MonthNavigator';
+import { maaserFor } from '@/lib/calculations';
 import { translateApiError } from '@/lib/errorCodes';
 import {
   Alert,
@@ -284,7 +285,7 @@ export default function IncomeView({ maxMonth }: { maxMonth: string }) {
     if (!Number.isFinite(shekels) || !Number.isFinite(percent)) return null;
     const agorot = Math.round(shekels * 100);
     if (agorot <= 0 || percent <= 0) return null;
-    return Math.round(agorot * (percent / 100));
+    return maaserFor(agorot, percent);
   }, [amount, percentage]);
 
   const handleSubmit = async (e: React.FormEvent) => {
