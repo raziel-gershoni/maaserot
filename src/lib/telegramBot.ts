@@ -14,14 +14,14 @@
 
 const API = 'https://api.telegram.org';
 
-export interface TgUser { id: number; language_code?: string; first_name?: string }
+export interface TgUser { id: number; is_bot?: boolean; language_code?: string; first_name?: string }
 export interface TgChat { id: number; type: 'private' | 'group' | 'supergroup' | 'channel' }
 export interface TgPhotoSize { file_id: string; width: number; height: number; file_size?: number }
 export interface TgDocument { file_id: string; mime_type?: string; file_size?: number }
 export interface TgMessage {
   message_id: number; date: number; chat: TgChat; from?: TgUser; text?: string;
   photo?: TgPhotoSize[]; document?: TgDocument; media_group_id?: string;
-  reply_to_message?: { message_id: number };
+  reply_to_message?: { message_id: number; from?: TgUser };
 }
 export interface TgCallbackQuery {
   id: string; from: TgUser; data?: string;

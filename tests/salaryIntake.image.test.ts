@@ -407,6 +407,21 @@ describe('reads that fail', () => {
     expect(db.pendingIncomes[0].status).toBe('CANCELLED');
   });
 
+  it('a download over 7.5 MB whose size Telegram did not state → "too large", not "try again"', async () => {
+    const { db, tg, reader, handleUpdate } = await setup();
+    const { TelegramError } = await import('@/lib/telegramBot');
+    tg.getFile.mockResolvedValueOnce({ file_path: 'p' } as never);
+    tg.downloadFile.mockRejectedValueOnce(new TelegramError('download', 'too large', 413));
+    const errors = silenceErrors();
+
+    await handleUpdate(photoUpdate({ messageId: 10 }));
+
+    expect(screen(tg).text).toBe(notice('tooLarge'));
+    expect(reader).not.toHaveBeenCalled();
+    expect(db.pendingIncomes[0]).toMatchObject({ status: 'CANCELLED', candidates: [] });
+    expect(errors).not.toHaveBeenCalled();
+  });
+
   it('bytes that are not the image they claim to be → unreadable, with no read', async () => {
     const { db, tg, reader, handleUpdate } = await setup();
     tg.downloadFile.mockResolvedValueOnce(Buffer.from('<html>not an image</html>'));

@@ -41,9 +41,12 @@ export async function handleText(ctx: Ctx, message: TgMessage): Promise<void> {
 
     // One clock for the checks and the write, so they agree on whether the card has expired.
     const now = ctx.now();
-    const replyTo = message.reply_to_message?.message_id;
+    const replyTo = cardReplyOf(message);
     const row =
       replyTo !== undefined ? await rowForReply(sender.id, chatId, replyTo) : await newestOpenRow(sender.id, chatId, now);
+    // A redelivered update: this very message started the card, and the first
+    // delivery sent it. Applied again, it would send the card a second time.
+    if (row?.sourceMessageId === message.message_id) return;
     if (row) return await setAmount(ctx, message, row, amount, now);
     if (replyTo !== undefined) return await say(ctx, message, answer(sender.locale, null, now));
     await startCard(ctx, message, amount, now);
@@ -60,6 +63,18 @@ export async function handleText(ctx: Ctx, message: TgMessage): Promise<void> {
       logError('text', e, { updateId: ctx.updateId });
     }
   }
+}
+
+/**
+ * The message a reply names as its card. Only a reply to one of the bot's
+ * messages does (spec §5): a reply to the user's own, such as their
+ * screenshot, is an amount sent on its own. A reply whose author Telegram left
+ * out is taken as one to the bot, since a reply must never fall through to
+ * another row and quietly change a different deposit.
+ */
+function cardReplyOf(message: TgMessage): number | undefined {
+  const reply = message.reply_to_message;
+  return reply && reply.from?.is_bot !== false ? reply.message_id : undefined;
 }
 
 /** For known and unknown senders alike, so there is no Ctx: only where to answer, and in which language. */

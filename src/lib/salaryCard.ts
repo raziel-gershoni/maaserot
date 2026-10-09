@@ -105,6 +105,9 @@ const RLM = '\u200f';
 // Embeddings, overrides and isolates. Left in, one could close our isolate
 // early, or open one of its own that swallows our closing mark.
 const BIDI_CONTROLS = /[\u202a-\u202e\u2066-\u2069]/g;
+// Line breaks and other control characters. Left in, one would split a card
+// line, and in Hebrew compose() would then put an RLM inside the isolate.
+const LINE_BREAKS = /[\p{Cc}\u2028\u2029]+/gu;
 const MAX_QUOTED = 40;
 
 /** Cut to `max` code points, so a surrogate pair is never split. */
@@ -116,7 +119,7 @@ function truncate(s: string, max: number): string {
 const isolate = (s: string) => '\u2068' + s + '\u2069';
 
 /** Text we did not write: cut first, so the isolate always closes. */
-const quote = (s: string) => isolate(truncate(s.replace(BIDI_CONTROLS, ''), MAX_QUOTED));
+const quote = (s: string) => isolate(truncate(s.replace(BIDI_CONTROLS, '').replace(LINE_BREAKS, ' '), MAX_QUOTED));
 
 /** A message from its lines; a string may hold several. */
 function compose(locale: Locale, lines: string[], keyboard?: InlineButton[][]): OutgoingMessage {

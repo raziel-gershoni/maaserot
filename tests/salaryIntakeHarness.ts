@@ -151,7 +151,16 @@ export function photoUpdate(o: From & { messageId: number; date?: number; mediaG
   };
 }
 
-export function textUpdate(o: From & { text: string; messageId: number; date?: number; replyTo?: number }): TgUpdate {
+/** Telegram names the author of a replied-to message; the bot's are marked is_bot. */
+const BOT = { id: 4242, is_bot: true };
+
+/**
+ * `replyTo` replies to one of the bot's messages (a card, a notice);
+ * `replyToOwn` to one of the user's own, such as their screenshot.
+ */
+export function textUpdate(
+  o: From & { text: string; messageId: number; date?: number; replyTo?: number; replyToOwn?: number }
+): TgUpdate {
   const fromId = o.fromId ?? 111;
   return {
     update_id: ++updateSeq,
@@ -161,7 +170,10 @@ export function textUpdate(o: From & { text: string; messageId: number; date?: n
       chat: { id: o.chatId ?? fromId, type: 'private' },
       from: from(fromId, o.languageCode),
       text: o.text,
-      ...(o.replyTo !== undefined && { reply_to_message: { message_id: o.replyTo } }),
+      ...(o.replyTo !== undefined && { reply_to_message: { message_id: o.replyTo, from: BOT } }),
+      ...(o.replyToOwn !== undefined && {
+        reply_to_message: { message_id: o.replyToOwn, from: { ...from(fromId), is_bot: false } },
+      }),
     },
   };
 }

@@ -304,6 +304,21 @@ describe('renderCard text', () => {
     expect(text).not.toContain('x'.repeat(41));
   });
 
+  it('keeps a line break in a description or a name from splitting a card line', () => {
+    const plain = lines(card({ duplicate: { name: 'Dana Levi', month: '2026-11', amount: 1 } }));
+    const broken = (locale: CardView['locale']) => lines(card({
+      locale, description: 'ACME\nLtd\r\n\u2028x\t', duplicate: { name: 'Dana\nLevi', month: '2026-11', amount: 1 },
+    }));
+    expect(broken('en')).toHaveLength(plain.length);
+    expect(broken('en')[0]).toBe(`💰 Salary deposit · ${FSI}ACME Ltd x ${PDI}`);
+    expect(broken('en').join('\n')).toContain(`${FSI}Dana Levi${PDI} already added`);
+    // In Hebrew no RLM lands inside an isolate, as it would at a split line's start.
+    const he = broken('he');
+    expect(he).toHaveLength(plain.length);
+    for (const line of he) expect(line.startsWith(RLM)).toBe(true);
+    for (const [, inside] of he.join('\n').matchAll(/\u2068([^\u2069]*)\u2069/g)) expect(inside).not.toMatch(/[\u200f\n]/);
+  });
+
   it('keeps a description from closing the isolate early', () => {
     const text = renderCard(card({ description: `evil${PDI}\u202e tail` })).text;
     expect(text).toContain(`${FSI}evil tail${PDI}`);

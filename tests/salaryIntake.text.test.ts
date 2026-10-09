@@ -217,6 +217,43 @@ describe('an amount sent as a reply to a card', () => {
   });
 });
 
+describe('an amount sent as a reply to the user\'s own message', () => {
+  // Spec §5 scopes the reply rule to a reply to a bot message.
+  it('is an amount sent on its own: it goes to the newest open card', async () => {
+    const row = cardRow({ sourceMessageId: 10 });
+    const { db, tg, handleUpdate } = await setup({ pendingIncomes: [row] });
+
+    await handleUpdate(textUpdate({ text: '12,500', messageId: 600, replyToOwn: 10 }));
+
+    expect(rowOf(db, row.id)).toMatchObject({ status: 'OPEN', version: 2, amount: 1250000, cardMessageId: FIRST_SENT_ID });
+    expect(tg.sent.map((s) => s.msg)).toEqual([renderCard(cardView(rowOf(db, row.id)))]);
+    expect(tg.sent.map((s) => s.msg)).not.toContainEqual(notice('staleReply'));
+  });
+
+  it('starts a typed card when no card is open', async () => {
+    const { db, tg, handleUpdate } = await setup();
+
+    await handleUpdate(textUpdate({ text: '12,500', messageId: 600, replyToOwn: 599 }));
+
+    expect(db.pendingIncomes).toHaveLength(1);
+    expect(db.pendingIncomes[0]).toMatchObject({ status: 'OPEN', amount: 1250000, viaImage: false, sourceMessageId: 600 });
+    expect(tg.sent.map((s) => s.msg)).toEqual([renderCard(cardView(db.pendingIncomes[0]))]);
+  });
+
+  it('a reply whose author Telegram left out is still taken as a reply to the bot, and never falls through', async () => {
+    const open = cardRow();
+    const { db, tg, handleUpdate } = await setup({ pendingIncomes: [open] });
+    const before = structuredClone(db.pendingIncomes);
+    const update = textUpdate({ text: '12,500', messageId: 600, replyTo: 499 });
+    delete update.message!.reply_to_message!.from;
+
+    await handleUpdate(update);
+
+    expect(db.pendingIncomes).toEqual(before);
+    expect(tg.sent.map((s) => s.msg)).toEqual([notice('staleReply')]);
+  });
+});
+
 describe('an amount sent on its own', () => {
   it("goes to the newest open card: a picker becomes a card dated the Israeli day it was sent", async () => {
     const older = cardRow({ createdAt: new Date(Date.now() - HOUR), cardMessageId: 400 });
@@ -306,6 +343,19 @@ describe('an amount sent on its own', () => {
     expect(tg.sent[0].msg).toEqual(
       renderCard(cardView(db.pendingIncomes[0], { today: '2026-10-01', currentMonth: '2026-10' }))
     );
+  });
+
+  it('redelivered after its card went out, sends no second card', async () => {
+    const { db, tg, handleUpdate } = await setup();
+    const update = textUpdate({ text: '12,500', messageId: 600 });
+    await handleUpdate(update);
+
+    await handleUpdate(update);
+
+    expect(db.pendingIncomes).toHaveLength(1);
+    expect(db.pendingIncomes[0]).toMatchObject({ status: 'OPEN', version: 1, cardMessageId: FIRST_SENT_ID });
+    expect(tg.sent).toHaveLength(1);
+    expect(tg.edited).toHaveLength(0);
   });
 
   it('typed cards do not count toward the reading quota', async () => {

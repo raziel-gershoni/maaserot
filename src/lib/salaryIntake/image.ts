@@ -7,6 +7,7 @@ import {
   getFile,
   sendChatAction,
   sendMessage,
+  TelegramError,
   type OutgoingMessage,
   type TgMessage,
 } from '../telegramBot';
@@ -128,7 +129,15 @@ export async function handleImage(ctx: Ctx, message: TgMessage): Promise<void> {
     if ((file.size ?? 0) > MAX_IMAGE_BYTES) return await cancelWith(notice('tooLarge'));
     const info = await getFile(file.fileId, { deadline });
     if ((info.file_size ?? 0) > MAX_IMAGE_BYTES) return await cancelWith(notice('tooLarge'));
-    const image = await downloadFile(info.file_path, { deadline, maxBytes: MAX_IMAGE_BYTES });
+    let image: Buffer;
+    try {
+      image = await downloadFile(info.file_path, { deadline, maxBytes: MAX_IMAGE_BYTES });
+    } catch (err) {
+      // Telegram did not state the size, and the body ran over the cap: "try
+      // again" would fail the same way.
+      if (err instanceof TelegramError && err.status === 413) return await cancelWith(notice('tooLarge'));
+      throw err;
+    }
     if (sniff(image) !== file.mediaType) return await cancelWith(notice('unreadable'));
 
     const result = await readDeposits(image, file.mediaType, deadline);
