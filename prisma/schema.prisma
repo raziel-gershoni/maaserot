@@ -37,6 +37,7 @@ model User {
   groupPaymentMemberships GroupPaymentMember[]
   partnershipsAsUser1     Partnership[]          @relation("partnership_user1")
   partnershipsAsUser2     Partnership[]          @relation("partnership_user2")
+  pendingIncomes          PendingIncome[]
 }
 
 model FixedCharity {
@@ -64,6 +65,41 @@ model Income {
   createdAt   DateTime @default(now())
 
   @@index([userId, month])
+}
+
+enum PendingIncomeStatus {
+  READING   // claimed, Claude call in flight
+  OPEN      // card or picker shown, awaiting the user
+  APPROVED
+  CANCELLED // cancelled by the user, or a read that ended without a card
+}
+
+model PendingIncome {
+  id              String              @id @default(cuid())
+  userId          String
+  user            User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  chatId          BigInt
+  sourceMessageId Int                 // the user's screenshot or amount message
+  mediaGroupId    String?             // album id; only the first item of an album is read
+  viaImage        Boolean             @default(true)  // counts toward the reading quota
+  cardMessageId   Int?                // the bot's current placeholder/picker/card
+  candidates      Json                @default("[]")  // Candidate[]; cleared when status leaves OPEN
+  amount          Int?                // agorot
+  month           String?             // "YYYY-MM"
+  depositDate     String?             // "YYYY-MM-DD"
+  dateFromImage   Boolean             @default(true)
+  description     String?
+  percentage      Int?                // defaultPercent when the amount was selected; what approve records
+  status          PendingIncomeStatus @default(READING)
+  version         Int                 @default(0)     // bumped on every change; carried in callback_data
+  incomeId        String?
+  createdAt       DateTime            @default(now())
+  expiresAt       DateTime            // createdAt + 48 h
+
+  @@unique([chatId, sourceMessageId]) // redelivered update → no second row
+  @@unique([chatId, mediaGroupId])    // NULLs don't collide; album items 2..n conflict
+  @@index([userId, createdAt])        // quota and newest-row lookups
+  @@index([chatId, cardMessageId])    // reply-to-card lookup
 }
 
 model GroupPaymentSnapshot {
