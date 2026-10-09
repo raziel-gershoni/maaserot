@@ -3,7 +3,7 @@ import he from '../../messages/he.json';
 import en from '../../messages/en.json';
 import { formatCurrency, maaserFor } from './calculations';
 import { MAX_CANDIDATES, MAX_MONTHS_BACK, type Candidate } from './depositParsing';
-import { addDays, addMonths } from './israelTime';
+import { addDays, addMonths, monthLabel } from './israelTime';
 import type { InlineButton, OutgoingMessage } from './telegramBot';
 
 /**
@@ -29,6 +29,10 @@ import type { InlineButton, OutgoingMessage } from './telegramBot';
 export type Locale = 'he' | 'en';
 export type BotNoticeKey = keyof typeof he.bot.notice;
 export type BotToastKey = keyof typeof he.bot.toast;
+
+// One month name for the cards and the partner notifications; lives in
+// israelTime so the notifier need not load next-intl and the messages.
+export { monthLabel };
 
 // Typed as the Hebrew file, so an English file missing a key fails to compile.
 const MESSAGES: Record<Locale, typeof he> = { he, en };
@@ -130,21 +134,6 @@ function monthsApart(from: string, to: string): number {
   const [fy, fm] = from.split('-').map(Number);
   const [ty, tm] = to.split('-').map(Number);
   return (ty - fy) * 12 + (tm - fm);
-}
-
-/**
- * "October 2026" / "אוקטובר 2026"; short is "Oct 2026". The year stays in
- * the short form too: a card spans 24 months, and "Dec" seen in January is
- * ambiguous. Formatted in UTC from a UTC date, so the label is the month
- * itself whatever the server's time zone.
- */
-export function monthLabel(month: string, locale: Locale, style: 'long' | 'short' = 'long'): string {
-  const [y, m] = month.split('-').map(Number);
-  return new Intl.DateTimeFormat(locale === 'he' ? 'he-IL' : 'en-US', {
-    month: style,
-    year: 'numeric',
-    timeZone: 'UTC',
-  }).format(new Date(Date.UTC(y, m - 1, 1)));
 }
 
 /** What a deposit is called when the screen gave it no name, or there was no screen. */

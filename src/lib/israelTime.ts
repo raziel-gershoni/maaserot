@@ -5,7 +5,8 @@
  * previous month for two or three hours around every month boundary. Every
  * date the app shows or files by is an Israeli calendar date, so everything
  * goes through here. Intl does the time-zone work; nothing assumes a fixed
- * offset, because Israel switches between UTC+2 and UTC+3.
+ * offset, because Israel switches between UTC+2 and UTC+3. The one way a
+ * month is named for a user lives here too, free of any other dependency.
  */
 
 const PARTS = new Intl.DateTimeFormat('en-CA', {
@@ -48,4 +49,20 @@ export function isRealDate(y: number, m: number, d: number): boolean {
 
 export function toYmd(y: number, m: number, d: number): string {
   return `${y}-${pad(m)}-${pad(d)}`;
+}
+
+/**
+ * "October 2026" / "אוקטובר 2026"; short is "Oct 2026". The year stays in
+ * the short form too: a bot card spans 24 months, and "Dec" seen in January
+ * is ambiguous. Formatted in UTC from a UTC date, so the label is the month
+ * itself whatever the server's time zone. The bot's cards and the partner
+ * notifications both name months through this one function, so they agree.
+ */
+export function monthLabel(month: string, locale: string, style: 'long' | 'short' = 'long'): string {
+  const [y, m] = month.split('-').map(Number);
+  return new Intl.DateTimeFormat(locale === 'he' ? 'he-IL' : 'en-US', {
+    month: style,
+    year: 'numeric',
+    timeZone: 'UTC',
+  }).format(new Date(Date.UTC(y, m - 1, 1)));
 }

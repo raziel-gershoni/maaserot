@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addDays, addMonths, israelDate, israelMonth, isRealDate } from '@/lib/israelTime';
+import { addDays, addMonths, israelDate, israelMonth, isRealDate, monthLabel } from '@/lib/israelTime';
 
 describe('israelMonth', () => {
   it.each([
@@ -35,5 +35,20 @@ describe('addDays / addMonths', () => {
     expect(isRealDate(2026, 2, 29)).toBe(false);
     expect(isRealDate(2026, 13, 1)).toBe(false);
     expect(isRealDate(2026, 4, 31)).toBe(false);
+  });
+});
+
+describe('monthLabel', () => {
+  it('names the month and year, long by default', () => {
+    expect(monthLabel('2026-10', 'en')).toBe('October 2026');
+    expect(monthLabel('2026-10', 'he')).toBe('אוקטובר 2026');
+    expect(monthLabel('2027-01', 'en', 'long')).toBe('January 2027');
+  });
+  it('keeps the year in the short form', () => {
+    expect(monthLabel('2026-09', 'en', 'short')).toBe('Sep 2026');
+    expect(monthLabel('2025-12', 'en', 'short')).toBe('Dec 2025');
+  });
+  it('treats any locale but he as English, as the notifier passes a free string', () => {
+    expect(monthLabel('2026-09', 'fr')).toBe('September 2026');
   });
 });

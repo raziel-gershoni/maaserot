@@ -890,7 +890,7 @@ export function renderExpired(locale: Locale): OutgoingMessage;
 export function renderUpdatedPointer(locale: Locale): OutgoingMessage;
 export function renderNotice(locale: Locale, key: BotNoticeKey, values?: Record<string, string>, button?: { kind: 'app'; url: string; label?: 'openApp' | 'openAppTg' }): OutgoingMessage;
 export function toastText(locale: Locale, key: BotToastKey): string;
-export function monthLabel(month: string, locale: Locale, style?: 'long' | 'short'): string;
+export function monthLabel(month: string, locale: Locale, style?: 'long' | 'short'): string; // re-exported from israelTime.ts, which telegramNotify.ts also uses
 export function defaultDescription(locale: Locale): string;
 export function localeFor(user: { locale?: string | null } | null, languageCode?: string): Locale;
 ```
@@ -1051,8 +1051,8 @@ export function isExpired(row: Row, now: Date): boolean;
 export function candidatesOf(row: Row): Candidate[];
 
 // render.ts
-export async function rowMessage(row: Row, sender: Sender, now: Date, opts?: { saveFailed?: boolean }): Promise<OutgoingMessage>; // OPEN → card/picker; APPROVED → renderAdded; CANCELLED → renderCancelled; OPEN+expired → renderExpired; READING → renderReading
-export async function showRow(ctx: Ctx, messageId: number, row: Row, opts?: { saveFailed?: boolean }): Promise<void>; // edit + one re-read catch-up (spec §4 step 4)
+export async function rowMessage(row: Row, sender: Sender, now: Date, opts?: { saveFailed?: boolean; truncated?: boolean }): Promise<OutgoingMessage>; // OPEN → card/picker; APPROVED → renderAdded; CANCELLED → renderCancelled; OPEN+expired → renderExpired; READING → renderReading
+export async function showRow(ctx: Ctx, messageId: number, row: Row, opts?: { saveFailed?: boolean; truncated?: boolean }): Promise<void>; // edit + one re-read catch-up (spec §4 step 4); `truncated` goes to the first render only
 ```
 
 `logError` has exactly this body. It logs the error's name, its code or status, and the two ids, and nothing else:
@@ -1069,6 +1069,23 @@ console.error(`[salaryIntake:${scope}]`, (err as {name?: unknown})?.name ?? (err
 - **duplicate:** `findDuplicateIncome(prisma, userId, month, amount)` (Task 9 writes it in `approve.ts`; Task 8 starts it as a stub returning null, then Task 9 completes it). It also counts other `OPEN` rows of this user with the same `amount` and `month`.
 - **monthPaid:** `prisma.groupPaymentSnapshot.findFirst({ where: { month, members: { some: { userId } } } })`.
 - **leftToPay** (APPROVED only): `calculateGroupMonthState(userId, month).unpaid`.
+
+`rowMessage` derives these `CardView` and `PickerView` fields as follows; the others are the row's columns and `sender.locale`. Task 9 checks taps against the same rules, so they are fixed here:
+- **`today: israelDate(now)` and `currentMonth: israelMonth(now)`.**
+  - `now` is the caller's `ctx.now()`, the same clock `handleCallback` reads for `isAllowedMonth(arg, israelMonth(now))`. The card then offers exactly the months a tap may file into.
+  - Never derive either from `now.toISOString()` or any other UTC date. The server runs in UTC, so near a month boundary the card would hide a month the tap handler accepts, or show one it rejects. The old-date warning would also count from the wrong day.
+- **`hasOtherCandidates: candidatesOf(row).length > 1`.**
+  - A one-deposit row stores `candidates: [that candidate]`, so its length is already 1.
+  - `length > 0` (or `!!candidates.length`) would put "↩ Other deposit" on every single-deposit card, and Task 9 refuses `l` unless `candidates.length > 1`. Spec §3: "only when there were several candidates".
+- **`directionUnknown: candidatesOf(row).some((c) => c.amount === row.amount && c.date === row.depositDate && c.directionUnknown)`.**
+  - The row stores no direction flag, so it is read off the candidate the card shows: the one deposit, or the one a `p` tap picked.
+  - `some` rather than `find(...)?.directionUnknown`: if two lines share an amount and a date, the renderer cannot tell which was picked, so it warns when either is unsure.
+  - A typed card (`candidates []`), or a typed amount that matches no candidate, is never flagged. The user typed the amount.
+- **`truncated` (picker only): `opts?.truncated ?? false`.**
+  - The row stores no flag, and `toCandidates` reports `truncated` only once, at read time. So `image.ts` passes it to `showRow` on its first render of the picker, and nothing else ever passes it.
+  - `showRow` passes it to that first render only, not to its catch-up re-render: a row that changed since is no longer the fresh picker.
+  - Any later render of the picker drops the line: after an `l` tap, in a catch-up, or on a stale tap. This is accepted, because the user saw the line on the first picker.
+  - The alternative, `candidatesOf(row).length === MAX_CANDIDATES`, was rejected. It would claim "only the first 8" when exactly 8 were found, which is false.
 
 **Test harness (Task 8 creates `tests/salaryIntakeHarness.ts`, which Tasks 9–10 reuse):**
 - `setup(seed)` builds `createFakePrisma({ users, partnerships, incomes, snapshots, pendingIncomes, now })` and mocks four modules with `vi.doMock`:
@@ -1124,7 +1141,7 @@ console.error(`[salaryIntake:${scope}]`, (err as {name?: unknown})?.name ?? (err
     | Outcome | Row | Placeholder |
     |---|---|---|
     | 1 candidate | `finishReading`, `status OPEN` | the card. Copy the candidate's fields into the columns, except that an empty `description` becomes `defaultDescription(sender.locale)` (a line with no description trims to `''`). Also `percentage: sender.defaultPercent` and `candidates: [that candidate]`. |
-    | several candidates | `status OPEN` | the picker. Store all candidates. |
+    | several candidates | `status OPEN` | the picker. Store all candidates, and pass `toCandidates`'s `truncated` to `showRow` (see render.ts above). |
     | 0 candidates | `CANCELLED` | the `notBankScreen` or `onlyOutgoing` notice, with an Open app button to `${appUrl()}/${locale}/income` |
     | read error | `CANCELLED` | the matching notice: `error` → `readError`, `tooLong` → `tooLong`, `unreadable` → `unreadable`, `notConfigured` → `notConfigured` |
 
@@ -1138,6 +1155,7 @@ console.error(`[salaryIntake:${scope}]`, (err as {name?: unknown})?.name ?? (err
      - The first `sendMessage` replies to the photo with the `reading` notice.
      - The placeholder is edited into a card containing `12,345.67`.
      - The row is `OPEN`, version 1, `amount 1234567`, `month '2026-10'`, `percentage 10`.
+     - Decode every button's `callback_data` with `decodeCallback`: none has action `l`. The row holds one candidate, so there is no "↩ Other deposit".
   2. **Two incoming lines → a picker** with two `p` buttons.
   3. **Only outgoing lines →** row `CANCELLED`, and the placeholder says `onlyOutgoing`. **`isBankScreen` false →** `notBankScreen`.
   4. **The same update twice →** one row, and `readDeposits` called once. Spy on `console.error` once the first update is done: during the second, nothing is sent or edited and `console.error` (which `logError` writes to) is not called, so a claim that throws instead of returning null fails the test.
@@ -1164,6 +1182,18 @@ console.error(`[salaryIntake:${scope}]`, (err as {name?: unknown})?.name ?? (err
      - `JSON.stringify(consoleErrorSpy.mock.calls)` contains neither `'SECRET'` nor `'api.telegram.org'`.
 
      The type check matters. `JSON.stringify` turns an `Error` into `{}`, so a logged error object would pass the string check on its own.
+  18. **Israeli today and month, not UTC.**
+     - Set the clock to 2026-09-30T22:30Z, which is already 2026-10-01 in Israel. Send a photo whose reading has one line dated day 30, month 9, with no year.
+     - The row's month is `'2026-09'`.
+     - Decoding the card's buttons finds an `m` button with arg `'2026-10'`. This is the later button: the card is one month from the current one, so there is no jump button.
+     - No button carries a month after `'2026-10'`.
+     - A `currentMonth` taken from a UTC date (`'2026-09'`) would hide this button, so this test fails for it.
+  19. **Direction unknown.**
+     - A single line with direction `unknown` gives a card that shows `bot.card.warnDirection`.
+     - Test 1's `in` line gives a card that does not.
+  20. **More than 8 deposits.**
+     - Nine incoming lines give a picker with 8 `p` buttons. Its text equals `renderPicker({ locale: 'he', id: row.id, version: row.version, candidates: row.candidates as Candidate[], truncated: true }).text`.
+     - Exactly eight lines give 8 `p` buttons and the same render with `truncated: false`, so there is no `truncated` line.
 - [ ] **Step 2–4: fail → implement → pass** (`npx vitest run && npx tsc --noEmit`).
 - [ ] **Step 5: Commit**: `feat(bot): read salary screenshots into pending incomes`
 
@@ -1215,6 +1245,8 @@ console.error(`[salaryIntake:${scope}]`, (err as {name?: unknown})?.name ?? (err
   13. **The sender's `defaultPercent` is 0** when the row was picked, so the row's `percentage` is 0 → `checkPercent` is sent, the row stays `OPEN`, and no `Income`.
   14. **`answerCallbackQuery` rejects** → the approve still commits.
   15. **Picker row, `p:1`** → the card shows the second candidate, and `l` returns to the picker.
+      - Seed the second candidate with `directionUnknown: true`. The card after `p:1` shows `bot.card.warnDirection` and has an `l` button.
+      - After `l` and then `p:0`, the card for the first (`in`) candidate shows no `warnDirection`.
   16. **Approve on a row whose `cardMessageId` (500) ≠ the tapped message (400)** → the approve proceeds. Message 500 gets the final state, and message 400 gets `renderUpdatedPointer`.
   17. **Picker row whose second candidate has description `''`** → `p:1` sets `row.description` to `'משכורת'`, and the card shows `⁨משכורת⁩`.
 - [ ] **Step 2–4: fail → implement → pass.**

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { formatCurrency, maaserFor } from '@/lib/calculations';
+import { monthLabel as sharedMonthLabel } from '@/lib/israelTime';
 import type { InlineButton, OutgoingMessage } from '@/lib/telegramBot';
 import {
   decodeCallback,
@@ -118,6 +119,9 @@ describe('monthLabel', () => {
     expect(monthLabel('2026-10', 'en')).toBe('October 2026');
     expect(monthLabel('2026-09', 'en', 'short')).toBe('Sep 2026');
     expect(monthLabel('2026-10', 'he')).toBe('אוקטובר 2026');
+  });
+  it('is the one the partner notifications use, so the two always agree', () => {
+    expect(monthLabel).toBe(sharedMonthLabel);
   });
 });
 

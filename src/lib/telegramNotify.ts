@@ -1,4 +1,5 @@
 import { formatCurrency } from './calculations';
+import { monthLabel } from './israelTime';
 import { isTelegramConfigured, sendMessage, TelegramError } from './telegramBot';
 
 const APP_URL = process.env.NEXTAUTH_URL || 'https://maaserot.vercel.app';
@@ -6,19 +7,6 @@ const APP_URL = process.env.NEXTAUTH_URL || 'https://maaserot.vercel.app';
 /** The messages go out as HTML, and a name is the one part a user typed. */
 function escape(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
-
-/**
- * "September 2026" / "ספטמבר 2026". Formatted in UTC from a UTC date, so the
- * label is the month itself whatever the server's own time zone is.
- */
-function monthLabel(month: string, locale: string): string {
-  const [y, m] = month.split('-').map(Number);
-  return new Intl.DateTimeFormat(locale === 'he' ? 'he-IL' : 'en-US', {
-    month: 'long',
-    year: 'numeric',
-    timeZone: 'UTC',
-  }).format(new Date(Date.UTC(y, m - 1, 1)));
 }
 
 /**
