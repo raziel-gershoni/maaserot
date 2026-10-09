@@ -41,6 +41,7 @@
   Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
   Claude-Session: https://claude.ai/code/session_01U8Fjg3SjA2UeBQfqofsPhN
   ```
+- **BigInt values** are written `BigInt(n)`, never as a literal such as `123n`, in tests and code alike. `tsconfig.json` targets ES2017, where a BigInt literal fails `npx tsc --noEmit` with TS2737. The target stays as it is.
 - **Match the surrounding code style:** comments explain *why*, at the density of `src/lib/payments.ts`; naming follows the existing code.
 
 ## Review Focus
@@ -539,7 +540,7 @@ Check the SQL file:
 import { describe, expect, it } from 'vitest';
 import { createFakePrisma } from './fakePrisma';
 
-const base = { userId: 'u1', chatId: 1n, viaImage: true, expiresAt: new Date('2026-10-12T00:00:00Z') };
+const base = { userId: 'u1', chatId: BigInt(1), viaImage: true, expiresAt: new Date('2026-10-12T00:00:00Z') };
 
 describe('fakePrisma', () => {
   it('rolls a transaction back when the callback throws', async () => {
@@ -689,7 +690,7 @@ export function isTelegramConfigured(): boolean;
 - `downloadFile` fetches `https://api.telegram.org/file/bot<token>/<path>` with a 10 s timeout. It throws `TelegramError('download', 'too large', 413)` when the `content-length` or the received size exceeds `maxBytes`.
 
 - [ ] **Step 1: Write the failing tests.** Stub `globalThis.fetch` with `vi.fn` and set `process.env.TELEGRAM_BOT_TOKEN = '123:SECRET'`:
-  1. `sendMessage(123n, { text: 'hi' })` posts to a URL ending `/sendMessage`, and the body contains `"chat_id":"123"`.
+  1. `sendMessage(BigInt(123), { text: 'hi' })` posts to a URL ending `/sendMessage`, and the body contains `"chat_id":"123"`.
   2. A `{ ok: false, description: 'Bad Request: x' }` reply rejects with a `TelegramError` whose `message` and `description` do not contain `SECRET`.
   3. A fetch that never resolves until aborted rejects within `timeoutMs` (use `timeoutMs: 20`).
   4. `editMessageText` swallows `'Bad Request: message is not modified'`.
@@ -751,7 +752,7 @@ export async function notifyPartnerIncomeAdded(partnerTelegramId: bigint, partne
      - `amount: 1.5`
      - `percentage: 0`
      - `percentage: 101`
-  3. `notifyPartnerOfIncome` with a seeded ACCEPTED partnership and partner `telegramId: 99n` calls `notifyPartnerIncomeAdded(99n, 'he', 'Dana', 1000, 777, '2026-09')`, with `calculateGroupMonthState` mocked to `{ unpaid: 777 }`.
+  3. `notifyPartnerOfIncome` with a seeded ACCEPTED partnership and partner `telegramId: BigInt(99)` calls `notifyPartnerIncomeAdded(BigInt(99), 'he', 'Dana', 1000, 777, '2026-09')`, with `calculateGroupMonthState` mocked to `{ unpaid: 777 }`.
   4. Without a partnership, or when the partner has no `telegramId`, nothing is sent.
 - [ ] **Step 2: Run and fail. Step 3: Implement. Step 4: Run** `npx vitest run && npx tsc --noEmit`.
 - [ ] **Step 5: Commit**: `refactor(income): share addIncome with the bot; name the month in partner notifications`
@@ -1008,7 +1009,7 @@ src/lib/salaryIntake/
 export interface Sender { id: string; name: string | null; locale: Locale; defaultPercent: number }
 export interface Ctx { sender: Sender; chatId: bigint; deadline: number; now: () => Date }
 export async function loadSender(telegramId: number): Promise<Sender | null>;
-export function logError(scope: string, err: unknown, ids?: { updateId?: number; pendingId?: string }): void;
+export function logError(scope: string, err: unknown, ids?: { updateId?: number; pendingId?: string }): void; // writes one console.error line
 export function limits(): { userHourly: number; userDaily: number; dailyTotal: number };
 export function appUrl(): string; // process.env.NEXTAUTH_URL || 'https://maaserot.vercel.app'
 export const ROW_TTL_MS = 48 * 3600_000; export const CLEANUP_AFTER_MS = 7 * 24 * 3600_000;
@@ -1016,7 +1017,12 @@ export const ROW_TTL_MS = 48 * 3600_000; export const CLEANUP_AFTER_MS = 7 * 24 
 // rows.ts
 export type Row = PendingIncome; // generated type
 export async function claimImageRow(a: { userId: string; chatId: bigint; sourceMessageId: number; mediaGroupId: string | null; now: Date }): Promise<Row | null>; // null on P2002
-export async function createTypedRow(a: { userId: string; chatId: bigint; sourceMessageId: number; now: Date; amount: number; month: string; depositDate: string; description: string; percentage: number }): Promise<Row | null>;
+export async function createTypedRow(a: { userId: string; chatId: bigint; sourceMessageId: number; now: Date; amount: number; month: string; depositDate: string; description: string; percentage: number }): Promise<Row | null>; // null on P2002
+// claimImageRow and createTypedRow: detect a unique conflict with
+// `(err as { code?: unknown } | null)?.code === 'P2002'`, never with
+// `instanceof Prisma.PrismaClientKnownRequestError`. The test fake throws a plain
+// Error carrying `code`, and production Prisma errors carry the same `code`.
+// Any other error is rethrown.
 export async function deleteStaleRows(userId: string, now: Date): Promise<void>;
 export async function quotaExceeded(userId: string, now: Date): Promise<boolean>;
 export async function setCardMessage(id: string, cardMessageId: number, statuses: Row['status'][]): Promise<number>; // no version bump
@@ -1054,7 +1060,7 @@ export async function showRow(ctx: Ctx, messageId: number, row: Row, opts?: { sa
   - In both, `date` is Unix seconds, as Telegram sends it, and defaults to `Math.floor(Date.now() / 1000)`.
   - `tapUpdate({ data, messageId, fromId?, chatId? })`
   - `reading(transactions)`, which defaults a single `+12,345.67` incoming line dated 10/10
-- **Seed.** User `u1` has `telegramId 111n`, name `'Avi'`, `defaultPercent 10` and locale `'he'`. Partner `u2` has `telegramId 222n` and name `'Dana'`. There is one ACCEPTED partnership.
+- **Seed.** User `u1` has `telegramId: BigInt(111)`, name `'Avi'`, `defaultPercent 10` and locale `'he'`. Partner `u2` has `telegramId: BigInt(222)` and name `'Dana'`. There is one ACCEPTED partnership.
 - **Clock.** Fix it with `vi.useFakeTimers({ toFake: ['Date'] })` and `vi.setSystemTime(new Date('2026-10-12T08:00:00Z'))`. Use `deadline = Date.now() + 50_000`.
 
 ### Task 8: Intake: routing, sender resolution, screenshots
@@ -1108,8 +1114,8 @@ export async function showRow(ctx: Ctx, messageId: number, row: Row, opts?: { sa
      - The row is `OPEN`, version 1, `amount 1234567`, `month '2026-10'`, `percentage 10`.
   2. **Two incoming lines → a picker** with two `p` buttons.
   3. **Only outgoing lines →** row `CANCELLED`, and the placeholder says `onlyOutgoing`. **`isBankScreen` false →** `notBankScreen`.
-  4. **The same update twice →** one row, and `readDeposits` called once.
-  5. **Two photos with the same `media_group_id` →** `readDeposits` is called once.
+  4. **The same update twice →** one row, and `readDeposits` called once. Spy on `console.error` once the first update is done: during the second, nothing is sent or edited and `console.error` (which `logError` writes to) is not called, so a claim that throws instead of returning null fails the test.
+  5. **Two photos with the same `media_group_id` →** `readDeposits` is called once. As in test 4, during the second photo nothing is sent or edited and `console.error` is not called.
   6. **Quota.**
      - Seed 10 `viaImage` rows for `u1` in the last hour → `readDeposits` is not called, the new row is `CANCELLED`, and the user gets the `tooMany` notice.
      - Repeat with 200 rows from other users in the last 24 h.

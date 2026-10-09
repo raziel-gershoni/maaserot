@@ -106,6 +106,46 @@ describe('fakePrisma', () => {
     })).toMatchObject({ user1: null, user2: dana });
   });
 
+  it('checks every where key on pendingIncome.findUnique and applies each filter', async () => {
+    const { client } = createFakePrisma();
+    const row = await client.pendingIncome.create({ data: { ...base, sourceMessageId: 1 } });
+    await expect(client.pendingIncome.findUnique({ where: { id: row.id, nope: 1 } as never }))
+      .rejects.toThrow(/unsupported pendingIncome where key "nope"/);
+    await expect(client.pendingIncome.findUnique({ where: { status: 'READING' } as never }))
+      .rejects.toThrow(/needs where\.id/);
+    expect(await client.pendingIncome.findUnique({ where: { id: row.id, version: 0, status: 'READING' } }))
+      .toMatchObject({ id: row.id });
+    expect(await client.pendingIncome.findUnique({ where: { id: row.id, version: 1 } })).toBeNull();
+  });
+
+  it('checks every where key on pendingIncome.update and throws P2025 when nothing matches', async () => {
+    const { client, db } = createFakePrisma();
+    const row = await client.pendingIncome.create({ data: { ...base, sourceMessageId: 1 } });
+    await expect(client.pendingIncome.update({ where: { id: row.id, nope: 1 } as never, data: { amount: 1 } }))
+      .rejects.toThrow(/unsupported pendingIncome where key "nope"/);
+    // A stale version is a miss, as Prisma's extended where-unique makes it.
+    await expect(client.pendingIncome.update({ where: { id: row.id, version: 5 }, data: { amount: 1 } }))
+      .rejects.toMatchObject({ code: 'P2025' });
+    await expect(client.pendingIncome.update({ where: { id: 'c-missing' }, data: { amount: 1 } }))
+      .rejects.toMatchObject({ code: 'P2025' });
+    expect(db.pendingIncomes[0].amount).toBeNull();
+    expect(await client.pendingIncome.update({ where: { id: row.id, version: 0 }, data: { amount: 1, version: { increment: 1 } } }))
+      .toMatchObject({ amount: 1, version: 1 });
+  });
+
+  it('takes exactly one of id or a bigint telegramId on user.findUnique', async () => {
+    const dana = { id: 'u2', name: 'Dana', telegramId: BigInt(99), locale: 'he', defaultPercent: 10 };
+    const { client } = createFakePrisma({ users: [dana] });
+    await expect(client.user.findUnique({ where: { email: 'dana@example.com' } as never }))
+      .rejects.toThrow(/user\.findUnique/);
+    await expect(client.user.findUnique({ where: { id: 'u2', telegramId: BigInt(99) } as never }))
+      .rejects.toThrow(/user\.findUnique/);
+    // A number never equals the stored bigint, so it would always miss.
+    await expect(client.user.findUnique({ where: { telegramId: 99 } as never }))
+      .rejects.toThrow(/bigint/);
+    expect(await client.user.findUnique({ where: { id: 'u2' } })).toEqual(dana);
+  });
+
   it('gives the transaction callback a client with $executeRaw', async () => {
     const { client } = createFakePrisma();
     const userId = 'u1';

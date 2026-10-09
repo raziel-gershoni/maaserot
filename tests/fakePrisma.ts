@@ -16,10 +16,14 @@
  *    redelivered update or the second item of an album is turned away.
  *  - Conditional writes (`gt`/`gte`/`lt`/`lte`/`not`, `{ increment }`) report
  *    the count the optimistic-concurrency checks branch on.
+ *  - `pendingIncome.update` throws P2025 when no row matches, so a stale
+ *    `version` in its `where` fails as it does in Prisma.
  *
  * Only the query shapes this codebase actually issues are supported. An
- * unsupported shape throws loudly rather than silently returning nothing, and
- * on PendingIncome so does any `where` key the intake does not use.
+ * unsupported shape throws loudly rather than silently returning nothing. On
+ * the new tables so does a `where` the intake does not use: any PendingIncome
+ * key outside its list, and a User lookup by anything but `id` or a bigint
+ * `telegramId`.
  */
 
 export interface FakeIncome {
@@ -224,6 +228,15 @@ export function createFakePrisma(seed: Partial<FakeDb> & { now?: () => Date } = 
     );
   };
 
+  // Prisma's extended where-unique: `id` picks the row, and every other key
+  // (a `version`, a `status`) must match too, or the row counts as missing.
+  const pendingIncomeById = (method: string, where: Where) => {
+    if (typeof where.id !== 'string') {
+      throw new Error(`fakePrisma: pendingIncome.${method} needs where.id`);
+    }
+    return pendingIncomesWhere(where)[0];
+  };
+
   const userById = (id: string) => {
     const hit = db.users.find((u) => u.id === id);
     return hit ? { ...hit } : null;
@@ -336,6 +349,9 @@ export function createFakePrisma(seed: Partial<FakeDb> & { now?: () => Date } = 
     },
 
     user: {
+      // Exactly one of the two unique keys. Any other lookup, such as an
+      // `email` or a number where the column is a bigint, would match no row
+      // and let an "unknown sender" test pass for the wrong reason.
       // `select` is ignored: the whole row comes back.
       findUnique: async ({
         where,
@@ -343,10 +359,21 @@ export function createFakePrisma(seed: Partial<FakeDb> & { now?: () => Date } = 
         where: { id: string } | { telegramId: bigint };
         select?: unknown;
       }) => {
-        const hit =
-          'telegramId' in where
-            ? db.users.find((u) => u.telegramId === where.telegramId)
-            : db.users.find((u) => u.id === where.id);
+        const keys = Object.keys(where);
+        const [key] = keys;
+        if (keys.length !== 1 || (key !== 'id' && key !== 'telegramId')) {
+          throw new Error(
+            `fakePrisma: user.findUnique takes where { id } or { telegramId }, got [${keys}]`
+          );
+        }
+        const value = (where as Where)[key];
+        if (key === 'telegramId' && typeof value !== 'bigint') {
+          throw new Error('fakePrisma: user.findUnique needs telegramId as a bigint');
+        }
+        if (key === 'id' && typeof value !== 'string') {
+          throw new Error('fakePrisma: user.findUnique needs id as a string');
+        }
+        const hit = db.users.find((u) => u[key] === value);
         return hit ? { ...hit } : null;
       },
     },
@@ -383,8 +410,8 @@ export function createFakePrisma(seed: Partial<FakeDb> & { now?: () => Date } = 
         db.pendingIncomes.push(row);
         return { ...row };
       },
-      findUnique: async ({ where }: { where: { id: string } }) => {
-        const hit = db.pendingIncomes.find((r) => r.id === where.id);
+      findUnique: async ({ where }: { where: { id: string } & Where }) => {
+        const hit = pendingIncomeById('findUnique', where);
         return hit ? { ...hit } : null;
       },
       findFirst: async ({ where, orderBy }: { where?: Where; orderBy?: OrderBy } = {}) => {
@@ -394,9 +421,16 @@ export function createFakePrisma(seed: Partial<FakeDb> & { now?: () => Date } = 
       findMany: async ({ where }: { where?: Where } = {}) =>
         pendingIncomesWhere(where).map((r) => ({ ...r })),
       count: async ({ where }: { where?: Where } = {}) => pendingIncomesWhere(where).length,
-      update: async ({ where, data }: { where: { id: string }; data: PendingIncomeData }) => {
-        const row = db.pendingIncomes.find((r) => r.id === where.id);
-        if (!row) throw new Error(`pendingIncome ${where.id} not found`);
+      update: async ({
+        where,
+        data,
+      }: {
+        where: { id: string } & Where;
+        data: PendingIncomeData;
+      }) => {
+        const row = pendingIncomeById('update', where);
+        // What Prisma throws when the row to update is missing or a filter misses.
+        if (!row) throw Object.assign(new Error('Record not found'), { code: 'P2025' });
         applyData(row, data);
         return { ...row };
       },
