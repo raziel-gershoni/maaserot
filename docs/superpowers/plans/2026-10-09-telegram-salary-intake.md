@@ -28,7 +28,7 @@
 - **Money** is integer agorot. Maaser is always `maaserFor(amount, percent) = Math.round(amount * (percent / 100))`.
 - **Month format** is `'YYYY-MM'` and **date format** is `'YYYY-MM-DD'`. Israel time is computed with `Intl` and `timeZone: 'Asia/Jerusalem'`, never a fixed offset.
 - **Strings:** all new user-facing text goes in `messages/he.json` and `messages/en.json` under `bot` (and `income` for the help text). The two files must keep exact key parity. Glyphs and arrows live inside the strings.
-- **Logs** carry only the error class or code, `update_id` and `pendingId`. Never message text, amounts, descriptions, model output, Prisma argument dumps, the bot token or file URLs.
+- **Logs** carry only the error class or code, `update_id` and `pendingId`. Never message text, amounts, descriptions, model output, Prisma argument dumps, the bot token or file URLs. Log an error by its name and its code or status. Never log the error object, its message, its stack or its `cause`: a fetch-level `TypeError` can quote a request URL that holds the bot token.
 - **Claude model:** `export const DEPOSIT_MODEL = 'claude-opus-5-5'`.
 - **Limits:**
   - `callback_data` ≤ 64 bytes.
@@ -709,10 +709,10 @@ export function isTelegramConfigured(): boolean;
   - `src/app/api/income/route.ts`: POST uses `addIncome` and `after(() => notifyPartnerOfIncome(...))`, maps `IncomeError`; the `notifyPartner` function is removed from the route
   - `src/lib/telegramNotify.ts`: sends through `telegramBot.sendMessage`; `notifyPartnerIncomeAdded` gains `month`; text names it; button deep-links `?month=`; escapes HTML; `sendIncomeReminder` goes through `telegramBot` too
   - `src/app/api/settings/route.ts`: the `defaultPercent` guard
-- Test: `tests/incomes.test.ts`
+- Test: `tests/incomes.test.ts`, `tests/telegramNotify.test.ts`
 
 **Interfaces:**
-- Consumes: `maaserFor` (Task 1), `calculateGroupMonthState` (existing), `sendMessage` (Task 4).
+- Consumes: `maaserFor` (Task 1), `calculateGroupMonthState` (existing), and from Task 4 `sendMessage`, `isTelegramConfigured` and `TelegramError`.
 - Produces:
 ```ts
 export class IncomeError extends Error { constructor(public readonly code: ErrorCode, public readonly status: number) }
@@ -736,6 +736,14 @@ export async function notifyPartnerIncomeAdded(partnerTelegramId: bigint, partne
   - en: `${escape(sender)} added ${amount} income for ${monthLabel}.\nLeft to pay for ${monthLabel}: ${unpaid}`
 - **Button URL:** `${APP_URL}/${locale}/income?month=${month}`.
 - **`escape`** replaces `&`, `<` and `>`.
+- **`telegramNotify` logs.** The file has three log lines today, and all three break the Logs rule. Swapping `fetch` for `sendMessage` is not enough on its own, because all three would survive. Change them as follows:
+  - **Not configured.** `sendTelegramMessage` checks `isTelegramConfigured()` and returns `false`. It logs nothing, or at most `console.log('[telegramNotify] not configured')`. The `[DEV MODE] Would send Telegram message to …` line goes. It printed `chatId` and the text, and the text holds the income amount and the unpaid maaser.
+  - **Telegram refuses.** `sendMessage` throws a `TelegramError` on a non-2xx reply. The `response.text()` read and the log of Telegram's raw reply therefore go away with the fetch.
+  - **The catch** logs only the class and the status, then returns `false`:
+    ```ts
+    console.error('[telegramNotify]', (e as { name?: unknown })?.name ?? (e as object)?.constructor?.name, e instanceof TelegramError ? e.status : undefined);
+    ```
+    It never logs the error object, its message, stack or cause, the text, `chatId` or an amount. A fetch-level `TypeError` can quote the request URL, and that URL holds the bot token.
 - **Settings guard:**
   ```ts
   if (defaultPercent !== undefined) {
@@ -754,6 +762,12 @@ export async function notifyPartnerIncomeAdded(partnerTelegramId: bigint, partne
      - `percentage: 101`
   3. `notifyPartnerOfIncome` with a seeded ACCEPTED partnership and partner `telegramId: BigInt(99)` calls `notifyPartnerIncomeAdded(BigInt(99), 'he', 'Dana', 1000, 777, '2026-09')`, with `calculateGroupMonthState` mocked to `{ unpaid: 777 }`.
   4. Without a partnership, or when the partner has no `telegramId`, nothing is sent.
+  5. **`telegramNotify` logs nothing it must not.** This test is in `tests/telegramNotify.test.ts`.
+     - Setup: `vi.doMock('@/lib/telegramBot')` with `sendMessage` and `isTelegramConfigured` as `vi.fn`s, and the real `TelegramError` from `vi.importActual`. Spy on `console.log` and `console.error`.
+     - Each case calls `notifyPartnerIncomeAdded(BigInt(99), 'he', 'Dana', 123456, 777, '2026-09')`.
+     - **Not configured →** it returns `false`, and `sendMessage` is not called. Every `console.log` or `console.error` call, if there is one, is exactly `['[telegramNotify] not configured']`.
+     - **`sendMessage` rejects with `new TelegramError('sendMessage', 'Forbidden: bot was blocked by the user', 403)` →** it returns `false`. `console.error` was called exactly once, with `['[telegramNotify]', 'TelegramError', 403]`.
+     - **`sendMessage` rejects with `new TypeError('Failed to parse URL from https://api.telegram.org/bot123:SECRET/sendMessage')` →** it returns `false`. `console.error` was called exactly once, with `['[telegramNotify]', 'TypeError', undefined]`.
 - [ ] **Step 2: Run and fail. Step 3: Implement. Step 4: Run** `npx vitest run && npx tsc --noEmit`.
 - [ ] **Step 5: Commit**: `refactor(income): share addIncome with the bot; name the month in partner notifications`
 
@@ -1007,9 +1021,9 @@ src/lib/salaryIntake/
 ```ts
 // context.ts
 export interface Sender { id: string; name: string | null; locale: Locale; defaultPercent: number }
-export interface Ctx { sender: Sender; chatId: bigint; deadline: number; now: () => Date }
+export interface Ctx { sender: Sender; chatId: bigint; updateId: number; deadline: number; now: () => Date } // updateId: the update's update_id, for logError
 export async function loadSender(telegramId: number): Promise<Sender | null>;
-export function logError(scope: string, err: unknown, ids?: { updateId?: number; pendingId?: string }): void; // writes one console.error line
+export function logError(scope: string, err: unknown, ids?: { updateId?: number; pendingId?: string }): void; // writes one console.error line; exact body below
 export function limits(): { userHourly: number; userDaily: number; dailyTotal: number };
 export function appUrl(): string; // process.env.NEXTAUTH_URL || 'https://maaserot.vercel.app'
 export const ROW_TTL_MS = 48 * 3600_000; export const CLEANUP_AFTER_MS = 7 * 24 * 3600_000;
@@ -1041,6 +1055,16 @@ export async function rowMessage(row: Row, sender: Sender, now: Date, opts?: { s
 export async function showRow(ctx: Ctx, messageId: number, row: Row, opts?: { saveFailed?: boolean }): Promise<void>; // edit + one re-read catch-up (spec §4 step 4)
 ```
 
+`logError` has exactly this body. It logs the error's name, its code or status, and the two ids, and nothing else:
+```ts
+console.error(`[salaryIntake:${scope}]`, (err as {name?: unknown})?.name ?? (err as object)?.constructor?.name, (err as {code?: unknown})?.code ?? (err as {status?: unknown})?.status, ids?.updateId, ids?.pendingId);
+```
+- Never pass `err.message`, `err.stack`, `err.cause` or `err` itself, here or anywhere else in the folder.
+- The reason is that not every failure is a `TelegramError`. `telegramBot` passes fetch-level failures through unchanged:
+  - A timeout is a `DOMException` named `TimeoutError`, whose `code` is 23.
+  - Undici's `TypeError` can quote the whole request URL, and that URL holds the bot token. An example is `Failed to parse URL from https://api.telegram.org/bot<token>/sendMessage`. Its `cause` can carry the URL too.
+- The name and the code or status are safe to log. The message is not.
+
 `rowMessage` gathers the card warnings:
 - **duplicate:** `findDuplicateIncome(prisma, userId, month, amount)` (Task 9 writes it in `approve.ts`; Task 8 starts it as a stub returning null, then Task 9 completes it). It also counts other `OPEN` rows of this user with the same `amount` and `month`.
 - **monthPaid:** `prisma.groupPaymentSnapshot.findFirst({ where: { month, members: { some: { userId } } } })`.
@@ -1049,7 +1073,7 @@ export async function showRow(ctx: Ctx, messageId: number, row: Row, opts?: { sa
 **Test harness (Task 8 creates `tests/salaryIntakeHarness.ts`, which Tasks 9–10 reuse):**
 - `setup(seed)` builds `createFakePrisma({ users, partnerships, incomes, snapshots, pendingIncomes, now })` and mocks four modules with `vi.doMock`:
   - **`@/lib/prisma`:** `{ prisma: fake.client }`.
-  - **`@/lib/telegramBot`:** a recorder. `sendMessage` returns increasing `message_id`s from 1000 and records `{ chatId, msg, replyTo }`. `editMessageText` records `{ chatId, messageId, msg }`. `answerCallbackQuery` records `{ id, text }` and can be told to reject. `getFile` returns `{ file_path: 'p', file_size: 1000 }`. `downloadFile` returns a JPEG buffer (`Buffer.from([0xff, 0xd8, 0xff, 0xe0, …])`). `isNotModified` and the types are kept from `vi.importActual`.
+  - **`@/lib/telegramBot`:** a recorder. `sendMessage` returns increasing `message_id`s from 1000 and records `{ chatId, msg, replyTo }`. `editMessageText` records `{ chatId, messageId, msg }`. `answerCallbackQuery` records `{ id, text }` and can be told to reject. `getFile` returns `{ file_path: 'p', file_size: 1000 }`. `downloadFile` is a `vi.fn` that returns a JPEG buffer (`Buffer.from([0xff, 0xd8, 0xff, 0xe0, …])`), so a test can make it reject once. `isNotModified` and the types are kept from `vi.importActual`.
   - **`@/lib/depositReader`:** `readDeposits` is a `vi.fn` the test sets.
   - **`@/lib/monthState`:** `calculateGroupMonthState` resolves `{ unpaid: 50_000 }`.
 - It also partially mocks `@/lib/incomes`, keeping the real `addIncome` and `IncomeError` and replacing `notifyPartnerOfIncome` with a `vi.fn`.
@@ -1082,7 +1106,8 @@ export async function showRow(ctx: Ctx, messageId: number, row: Row, opts?: { sa
     - any other document → the `unsupportedFile` notice
     - `callback_query` → `handleCallback`
     - text → `handleText`
-  - Wrap everything in try/catch → `logError`.
+  - Build each handler's `Ctx` with `updateId: update.update_id`.
+  - Wrap everything in try/catch → `logError('update', err, { updateId: update.update_id })`.
 - **`image.ts`.** Follow the spec Flow 2 steps 1–10 exactly.
   - **Sent time.** Step 7 is `toCandidates(reading, new Date(message.date * 1000))`. Telegram's `date` is Unix seconds, so `new Date(message.date)` lands in January 1970. Do not use `ctx.now()` either: it is the arrival time, which is later than the sent time when Telegram delivers late.
   - **Pick the photo.** Choose the size with the largest `width * height`.
@@ -1104,7 +1129,8 @@ export async function showRow(ctx: Ctx, messageId: number, row: Row, opts?: { sa
     | read error | `CANCELLED` | the matching notice: `error` → `readError`, `tooLong` → `tooLong`, `unreadable` → `unreadable`, `notConfigured` → `notConfigured` |
 
   - **Re-sent screenshot (step 8):** `findResent` finds a match, so this row becomes `CANCELLED` and the placeholder becomes `alreadyGot` (other row `OPEN`) or `alreadyAdded` (`APPROVED`).
-  - **Catch-all.** Any throw after the claim → `finishReading(id, { status: 'CANCELLED' })`, then edit the placeholder with `readError`. If no placeholder exists, send it as a new message, best effort.
+  - **Catch-all.** Any throw after the claim → `logError('image', err, { updateId: ctx.updateId, pendingId: row.id })`, then `finishReading(id, { status: 'CANCELLED' })`, then edit the placeholder with `readError`. If no placeholder exists, send it as a new message, best effort.
+    - A rejection from `getFile` or `downloadFile` lands here too, whatever its class: a `TelegramError`, a `DOMException` or a `TypeError`.
 
 - [ ] **Step 1: Write failing tests** (`tests/salaryIntake.image.test.ts`):
   1. **One deposit → one card.**
@@ -1129,6 +1155,15 @@ export async function showRow(ctx: Ctx, messageId: number, row: Row, opts?: { sa
   14. **Cleanup.** A row of `u1` that expired 8 days ago is deleted when a new photo arrives. One that expired 2 days ago is kept.
   15. **The sent time, not the arrival time.** With the clock at 2026-10-12T08:00Z, send `photoUpdate` with `date` = the Unix seconds of 2026-09-30T08:00Z, and a reading line with `relativeDay: 'today'` (day, month and year null) → the row has `depositDate '2026-09-30'` and `month '2026-09'`. This fails for both `ctx.now()` and `new Date(seconds)`.
   16. **A blank description.** A reading line with description `'   '` → `row.description === 'משכורת'` for the `he` sender. With `u1` seeded with locale `'en'` → `'Salary'`.
+  17. **A fetch-level download failure is logged by name only.** Run this twice, with a fresh photo and a cleared `console.error` spy each time. The first run makes `tg.downloadFile` reject once with `new DOMException('x', 'TimeoutError')`. The second makes it reject once with `new TypeError('Failed to parse URL from https://api.telegram.org/file/bot123:SECRET/p')`. In each run:
+     - The row is `CANCELLED`, the placeholder says `readError`, and `readDeposits` is not called.
+     - `console.error` was called exactly once:
+       - for the timeout, with `['[salaryIntake:image]', 'TimeoutError', 23, <update_id>, <row id>]`
+       - for the `TypeError`, with `['[salaryIntake:image]', 'TypeError', undefined, <update_id>, <row id>]`
+     - Every argument of every call is a string, a number or `undefined`.
+     - `JSON.stringify(consoleErrorSpy.mock.calls)` contains neither `'SECRET'` nor `'api.telegram.org'`.
+
+     The type check matters. `JSON.stringify` turns an `Error` into `{}`, so a logged error object would pass the string check on its own.
 - [ ] **Step 2–4: fail → implement → pass** (`npx vitest run && npx tsc --noEmit`).
 - [ ] **Step 5: Commit**: `feat(bot): read salary screenshots into pending incomes`
 
