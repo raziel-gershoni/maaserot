@@ -52,9 +52,13 @@ export async function PATCH(request: Request) {
     const body = await request.json();
     const { name, defaultPercent, locale } = body;
 
-    // Validate inputs
-    if (defaultPercent && (defaultPercent < 1 || defaultPercent > 100)) {
-      return apiError('VALIDATION_FAILED', 400);
+    // Validate inputs. A `0` used to slip through the truthiness check, and
+    // the bot records the default percentage as given. The writes below store
+    // this same `Number(...)`: `parseInt` would read "0.5e1", which passes
+    // here as 5, as 0.
+    if (defaultPercent !== undefined) {
+      const p = Number(defaultPercent);
+      if (!Number.isInteger(p) || p < 1 || p > 100) return apiError('VALIDATION_FAILED', 400);
     }
 
     if (locale && !['he', 'en'].includes(locale)) {
@@ -66,7 +70,7 @@ export async function PATCH(request: Request) {
       where: { id: session.user.id },
       data: {
         ...(name !== undefined && { name }),
-        ...(defaultPercent !== undefined && { defaultPercent: parseInt(defaultPercent) }),
+        ...(defaultPercent !== undefined && { defaultPercent: Number(defaultPercent) }),
         ...(locale !== undefined && { locale }),
       },
       select: {
@@ -91,7 +95,7 @@ export async function PATCH(request: Request) {
       });
 
       // Update each income with new percentage and recalculated maaser
-      const newDefaultPercent = parseInt(defaultPercent);
+      const newDefaultPercent = Number(defaultPercent);
       for (const income of currentMonthIncomes) {
         const newMaaser = maaserFor(income.amount, newDefaultPercent);
         await prisma.income.update({

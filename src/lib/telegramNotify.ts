@@ -1,52 +1,74 @@
 import { formatCurrency } from './calculations';
+import { isTelegramConfigured, sendMessage, TelegramError } from './telegramBot';
 
 const APP_URL = process.env.NEXTAUTH_URL || 'https://maaserot.vercel.app';
 
+/** The messages go out as HTML, and a name is the one part a user typed. */
+function escape(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
 /**
- * Send a Telegram message with an optional "Open App" button.
- * Returns false silently if TELEGRAM_BOT_TOKEN is not configured.
+ * "September 2026" / "ספטמבר 2026". Formatted in UTC from a UTC date, so the
+ * label is the month itself whatever the server's own time zone is.
  */
-async function sendTelegramMessage(chatId: bigint, text: string, locale: string): Promise<boolean> {
-  const botToken = process.env.TELEGRAM_BOT_TOKEN;
-  if (!botToken) {
-    console.log(`[DEV MODE] Would send Telegram message to ${chatId}: ${text}`);
+function monthLabel(month: string, locale: string): string {
+  const [y, m] = month.split('-').map(Number);
+  return new Intl.DateTimeFormat(locale === 'he' ? 'he-IL' : 'en-US', {
+    month: 'long',
+    year: 'numeric',
+    timeZone: 'UTC',
+  }).format(new Date(Date.UTC(y, m - 1, 1)));
+}
+
+/**
+ * Send a Telegram message with an "Open App" button to `buttonUrl`.
+ * Returns false, without throwing, when the bot is not configured or Telegram
+ * refuses.
+ *
+ * The logs carry the error's class and status and nothing else. The text holds
+ * an income and the maaser still owed, and a fetch-level `TypeError` can quote
+ * the request URL, which holds the bot token.
+ */
+async function sendTelegramMessage(
+  chatId: bigint,
+  text: string,
+  locale: string,
+  buttonUrl: string,
+): Promise<boolean> {
+  if (!isTelegramConfigured()) {
+    console.log('[telegramNotify] not configured');
     return false;
   }
 
   const buttonText = locale === 'he' ? '📊 פתח מעשרות' : '📊 Open Maaserot';
-  const buttonUrl = `${APP_URL}/${locale}/income`;
 
   try {
-    const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: chatId.toString(),
+    await sendMessage(
+      chatId,
+      {
         text,
-        parse_mode: 'HTML',
-        reply_markup: {
-          inline_keyboard: [
-            [{ text: buttonText, web_app: { url: buttonUrl } }],
-          ],
-        },
-      }),
-    });
-
-    if (!response.ok) {
-      const error = await response.text();
-      console.error('Telegram message failed:', error);
-      return false;
-    }
+        replyMarkup: { inline_keyboard: [[{ text: buttonText, web_app: { url: buttonUrl } }]] },
+      },
+      { parseMode: 'HTML' },
+    );
     return true;
-  } catch (error) {
-    console.error('Telegram message error:', error);
+  } catch (e) {
+    console.error(
+      '[telegramNotify]',
+      (e as { name?: unknown })?.name ?? (e as object)?.constructor?.name,
+      e instanceof TelegramError ? e.status : undefined,
+    );
     return false;
   }
 }
 
 /**
- * Notify a partner that income was added.
+ * Notify a partner that income was added to `month`.
  * Message is in the recipient's locale.
+ *
+ * The month is named, and the button opens it, because it is no longer
+ * always the current one: the bot files a deposit by the day it landed.
  */
 export async function notifyPartnerIncomeAdded(
   partnerTelegramId: bigint,
@@ -54,20 +76,32 @@ export async function notifyPartnerIncomeAdded(
   senderName: string,
   incomeAmount: number,
   groupUnpaid: number,
+  month: string,
 ): Promise<boolean> {
+  const sender = escape(senderName);
   const amount = formatCurrency(incomeAmount, partnerLocale);
   const unpaid = formatCurrency(groupUnpaid, partnerLocale);
+  const label = monthLabel(month, partnerLocale);
 
   const text = partnerLocale === 'he'
-    ? `${senderName} הוסיף/ה הכנסה של ${amount}.\nהמעשר שנותר לתשלום: ${unpaid}`
-    : `${senderName} added ${amount} income.\nMaaser remaining: ${unpaid}`;
+    ? `${sender} הוסיף/ה הכנסה של ${amount} ל${label}.\nנותר לתשלום ל${label}: ${unpaid}`
+    : `${sender} added ${amount} income for ${label}.\nLeft to pay for ${label}: ${unpaid}`;
 
-  return sendTelegramMessage(partnerTelegramId, text, partnerLocale);
+  return sendTelegramMessage(
+    partnerTelegramId,
+    text,
+    partnerLocale,
+    `${APP_URL}/${partnerLocale}/income?month=${month}`,
+  );
 }
 
 /**
  * Send a reminder to a partner asking them to add income.
  * Message is in the recipient's locale.
+ *
+ * The button opens the current month rather than `month`: a reminder read
+ * after the month turns would otherwise land on a month the form can no
+ * longer add to.
  */
 export async function sendIncomeReminder(
   partnerTelegramId: bigint,
@@ -75,15 +109,17 @@ export async function sendIncomeReminder(
   senderName: string,
   month: string,
 ): Promise<boolean> {
-  const [y, m] = month.split('-');
-  const monthLabel = new Date(parseInt(y), parseInt(m) - 1).toLocaleDateString(
-    partnerLocale === 'he' ? 'he-IL' : 'en-US',
-    { year: 'numeric', month: 'long' },
-  );
+  const sender = escape(senderName);
+  const label = monthLabel(month, partnerLocale);
 
   const text = partnerLocale === 'he'
-    ? `${senderName} מבקש/ת שתוסיף/י הכנסות לחודש ${monthLabel}`
-    : `${senderName} is asking you to add income for ${monthLabel}`;
+    ? `${sender} מבקש/ת שתוסיף/י הכנסות לחודש ${label}`
+    : `${sender} is asking you to add income for ${label}`;
 
-  return sendTelegramMessage(partnerTelegramId, text, partnerLocale);
+  return sendTelegramMessage(
+    partnerTelegramId,
+    text,
+    partnerLocale,
+    `${APP_URL}/${partnerLocale}/income`,
+  );
 }

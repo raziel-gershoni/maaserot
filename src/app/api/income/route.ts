@@ -1,9 +1,8 @@
-import { NextResponse } from 'next/server';
+import { after, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { getCurrentMonth, maaserFor } from '@/lib/calculations';
-import { calculateGroupMonthState } from '@/lib/monthState';
-import { notifyPartnerIncomeAdded } from '@/lib/telegramNotify';
+import { addIncome, IncomeError, notifyPartnerOfIncome } from '@/lib/incomes';
 import { apiError } from '../_lib/apiError';
 
 export async function GET(request: Request) {
@@ -38,72 +37,35 @@ export async function POST(request: Request) {
       return apiError('UNAUTHORIZED', 401);
     }
 
+    const userId = session.user.id;
     const { amount, percentage, description } = await request.json();
 
-    if (!amount || !percentage) {
-      return apiError('VALIDATION_FAILED', 400);
-    }
-
-    const month = getCurrentMonth();
-    const maaser = maaserFor(amount, percentage);
-
-    // Create income
-    const income = await prisma.income.create({
-      data: {
-        userId: session.user.id,
-        month,
-        amount,
-        percentage,
-        maaser,
-        description,
-      },
+    // The form files into the current month only; a past month's deposit
+    // goes through the bot. addIncome validates the rest.
+    const income = await addIncome(userId, {
+      month: getCurrentMonth(),
+      amount,
+      percentage,
+      description,
     });
 
-    // Fire-and-forget: notify partner via Telegram
-    notifyPartner(session.user.id, month, income.amount).catch((err) =>
-      console.error('Partner notification error:', err)
+    // A bare promise left running after the response was dropped whenever the
+    // function froze. after() keeps the function alive until it settles. It
+    // is logged by name only, as everything on the notification path is.
+    after(() =>
+      notifyPartnerOfIncome(userId, income.month, income.amount).catch((e) =>
+        console.error('[income] partner notification', (e as { name?: unknown })?.name)
+      )
     );
 
     return NextResponse.json({ income }, { status: 201 });
   } catch (error) {
+    if (error instanceof IncomeError) {
+      return apiError(error.code, error.status);
+    }
     console.error('Error creating income:', error);
     return apiError('SERVER_ERROR', 500);
   }
-}
-
-async function notifyPartner(userId: string, month: string, incomeAmount: number) {
-  // Find accepted partnership
-  const partnership = await prisma.partnership.findFirst({
-    where: {
-      status: 'ACCEPTED',
-      OR: [{ user1Id: userId }, { user2Id: userId }],
-    },
-    include: {
-      user1: { select: { id: true, name: true, telegramId: true, locale: true } },
-      user2: { select: { id: true, name: true, telegramId: true, locale: true } },
-    },
-  });
-
-  if (!partnership) return;
-
-  const sender = partnership.user1Id === userId ? partnership.user1 : partnership.user2;
-  const partner = partnership.user1Id === userId ? partnership.user2 : partnership.user1;
-
-  if (!partner.telegramId) return;
-
-  // One shared reckoning. Adding the two members' own states together
-  // double-counted every group payment — each member's totalPaid already
-  // includes the whole group amount — so the message understated what the
-  // couple still owed.
-  const { unpaid: groupUnpaid } = await calculateGroupMonthState(userId, month);
-
-  await notifyPartnerIncomeAdded(
-    partner.telegramId,
-    partner.locale || 'he',
-    sender.name || 'Partner',
-    incomeAmount,
-    groupUnpaid,
-  );
 }
 
 export async function PATCH(request: Request) {
