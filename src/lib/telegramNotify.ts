@@ -11,8 +11,11 @@ function escape(s: string): string {
 
 /**
  * Send a Telegram message with an "Open App" button to `buttonUrl`.
- * Returns false, without throwing, when the bot is not configured or Telegram
- * refuses.
+ * Returns false, without throwing, when the bot is not configured, the text
+ * cannot be built (a malformed month), or Telegram refuses.
+ *
+ * The text is built inside the try, so a caller's bad input is a false like
+ * any other failure rather than a throw into a request that already answered.
  *
  * The logs carry the error's class and status and nothing else. The text holds
  * an income and the maaser still owed, and a fetch-level `TypeError` can quote
@@ -20,9 +23,9 @@ function escape(s: string): string {
  */
 async function sendTelegramMessage(
   chatId: bigint,
-  text: string,
   locale: string,
   buttonUrl: string,
+  compose: () => string,
 ): Promise<boolean> {
   if (!isTelegramConfigured()) {
     console.log('[telegramNotify] not configured');
@@ -35,7 +38,7 @@ async function sendTelegramMessage(
     await sendMessage(
       chatId,
       {
-        text,
+        text: compose(),
         replyMarkup: { inline_keyboard: [[{ text: buttonText, web_app: { url: buttonUrl } }]] },
       },
       { parseMode: 'HTML' },
@@ -66,23 +69,23 @@ export async function notifyPartnerIncomeAdded(
   groupUnpaid: number,
   month: string,
 ): Promise<boolean> {
-  const sender = escape(senderName);
-  const amount = formatCurrency(incomeAmount, partnerLocale);
-  const unpaid = formatCurrency(groupUnpaid, partnerLocale);
-  const label = monthLabel(month, partnerLocale);
-  // Dated once, then named alone, as spec §Changes 4 writes it and as the
-  // sender's own "Added" card words the same income.
-  const name = monthLabel(month, partnerLocale, 'name');
-
-  const text = partnerLocale === 'he'
-    ? `${sender} הוסיף/ה הכנסה של ${amount} ל${label}.\nנותר לתשלום ל${name}: ${unpaid}`
-    : `${sender} added ${amount} income for ${label}.\nLeft to pay for ${name}: ${unpaid}`;
-
   return sendTelegramMessage(
     partnerTelegramId,
-    text,
     partnerLocale,
     `${APP_URL}/${partnerLocale}/income?month=${month}`,
+    () => {
+      const sender = escape(senderName);
+      const amount = formatCurrency(incomeAmount, partnerLocale);
+      const unpaid = formatCurrency(groupUnpaid, partnerLocale);
+      const label = monthLabel(month, partnerLocale);
+      // Dated once, then named alone, as spec §Changes 4 writes it and as the
+      // sender's own "Added" card words the same income.
+      const name = monthLabel(month, partnerLocale, 'name');
+
+      return partnerLocale === 'he'
+        ? `${sender} הוסיף/ה הכנסה של ${amount} ל${label}.\nנותר לתשלום ל${name}: ${unpaid}`
+        : `${sender} added ${amount} income for ${label}.\nLeft to pay for ${name}: ${unpaid}`;
+    },
   );
 }
 
@@ -100,17 +103,17 @@ export async function sendIncomeReminder(
   senderName: string,
   month: string,
 ): Promise<boolean> {
-  const sender = escape(senderName);
-  const label = monthLabel(month, partnerLocale);
-
-  const text = partnerLocale === 'he'
-    ? `${sender} מבקש/ת שתוסיף/י הכנסות לחודש ${label}`
-    : `${sender} is asking you to add income for ${label}`;
-
   return sendTelegramMessage(
     partnerTelegramId,
-    text,
     partnerLocale,
     `${APP_URL}/${partnerLocale}/income`,
+    () => {
+      const sender = escape(senderName);
+      const label = monthLabel(month, partnerLocale);
+
+      return partnerLocale === 'he'
+        ? `${sender} מבקש/ת שתוסיף/י הכנסות לחודש ${label}`
+        : `${sender} is asking you to add income for ${label}`;
+    },
   );
 }

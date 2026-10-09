@@ -75,6 +75,8 @@ export async function callTelegram<T>(
   if (!token) throw new TelegramError(method, 'not configured', 0);
 
   const res = await fetch(`${API}/bot${token}/${method}`, {
+    // Never Next's data cache: the URL holds the token, and a cache would key on it.
+    cache: 'no-store',
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: toJson(payload),
@@ -181,6 +183,9 @@ export async function downloadFile(
   if (!token) throw new TelegramError('download', 'not configured', 0);
 
   const res = await fetch(`${API}/file/bot${token}/${filePath}`, {
+    // A GET, so the one fetch a later fetchCache or 'use cache' would store,
+    // keyed on a URL that holds the token.
+    cache: 'no-store',
     signal: signalFor(10_000, opts.deadline),
   });
   const max = opts.maxBytes ?? Infinity;

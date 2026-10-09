@@ -90,7 +90,7 @@ List the transaction lines in screen order, top to bottom, at most 25. For each 
 
 - amountText: the amount exactly as shown, including any + or minus sign wherever it sits, and any ₪ or currency mark. Never guess a digit that is hidden, cut off or blurred. If an amount is not fully legible, write an empty string.
 - direction: how the app marks the line. "in" for money received: זכות, a + sign, a green amount, or a section heading for incoming money such as זיכויים. "out" for money paid: חובה, a minus sign, a red amount, or a section heading for outgoing money such as חיובים. "unknown" when the screen does not show which.
-- currency: "ILS" for shekels (₪, ש״ח, NIS), including amounts with no currency mark in an Israeli account. "other" for any other currency.
+- currency: "ILS" for shekels (₪, ש״ח, NIS), including amounts with no currency mark in an Israeli account, unless the screen shows the account or section is in another currency. "other" for any other currency.
 - day, month, year: the line's date, or the date heading it is listed under. Dates are day-first: DD/MM, DD/MM/YY or DD.MM.YYYY, so 05/09 is 5 September. Give the year as shown, or null when the date has none. All three are null when the line has no date.
 - relativeDay: "today" when the date is shown as היום and "yesterday" when it is shown as אתמול; day, month and year are then null. Otherwise null.
 - description: the line's description exactly as shown, in its own language.

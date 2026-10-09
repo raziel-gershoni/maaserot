@@ -127,6 +127,22 @@ describe('notifyPartnerIncomeAdded', () => {
   });
 });
 
+describe('a month that cannot be named', () => {
+  // Every caller passes a checked month today; a bad one must still be a
+  // false, as the functions promise, and not a throw.
+  it.each([
+    ['notifyPartnerIncomeAdded', (m: Awaited<ReturnType<typeof load>>) => m.notifyPartnerIncomeAdded(BigInt(99), 'he', 'Dana', 1, 1, 'not-a-month')],
+    ['sendIncomeReminder', (m: Awaited<ReturnType<typeof load>>) => m.sendIncomeReminder(BigInt(99), 'en', 'Dana', 'not-a-month')],
+  ])('%s resolves false, sends nothing and logs only the class', async (_, call) => {
+    const mod = await load();
+
+    await expect(call(mod)).resolves.toBe(false);
+
+    expect(sendMessage).not.toHaveBeenCalled();
+    expect(error.mock.calls).toEqual([['[telegramNotify]', 'RangeError', undefined]]);
+  });
+});
+
 describe('sendIncomeReminder', () => {
   it('goes through the bot client with the sender escaped', async () => {
     const { sendIncomeReminder } = await load();

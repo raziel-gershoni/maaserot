@@ -74,6 +74,8 @@ describe('callTelegram', () => {
     const { url, init } = lastCall();
     expect(url.endsWith('/sendMessage')).toBe(true);
     expect(init.method).toBe('POST');
+    // The URL holds the token: never a key in Next's data cache.
+    expect(init.cache).toBe('no-store');
     expect(new Headers(init.headers).get('content-type')).toBe('application/json');
     expect(String(init.body)).toContain('"chat_id":"123"');
   });
@@ -214,6 +216,7 @@ describe('downloadFile', () => {
 
     expect([...buf]).toEqual([1, 2, 3]);
     expect(lastCall().url).toBe(`https://api.telegram.org/file/bot${TOKEN}/photos/file_1.jpg`);
+    expect(lastCall().init.cache).toBe('no-store');
   });
 
   it('rejects with 413 once the received size exceeds maxBytes', async () => {

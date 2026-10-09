@@ -63,7 +63,13 @@ export async function POST(request: Request) {
     if (error instanceof IncomeError) {
       return apiError(error.code, error.status);
     }
-    console.error('Error creating income:', error);
+    // By name and code only: a Prisma error quotes the values it was given,
+    // the amount and the description among them.
+    console.error(
+      'Error creating income:',
+      (error as { name?: unknown })?.name,
+      (error as { code?: unknown })?.code
+    );
     return apiError('SERVER_ERROR', 500);
   }
 }

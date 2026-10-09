@@ -68,6 +68,8 @@ describe('addIncome', () => {
     ['a fractional amount', { amount: 1.5 }],
     ['a zero percentage', { percentage: 0 }],
     ['a percentage over 100', { percentage: 101 }],
+    // Past the Postgres integer column: Prisma would fail, and the form hear SERVER_ERROR.
+    ['an amount the amount column cannot hold', { amount: 2_147_483_648 }],
   ])('rejects %s and writes nothing', async (_label, over) => {
     const { addIncome, IncomeError } = await load();
 
@@ -76,6 +78,16 @@ describe('addIncome', () => {
     await expect(attempt).rejects.toBeInstanceOf(IncomeError);
     await expect(attempt).rejects.toMatchObject({ code: 'VALIDATION_FAILED', status: 400 });
     expect(db.incomes).toHaveLength(0);
+  });
+});
+
+describe('addIncome bounds', () => {
+  it('takes the largest amount the column holds', async () => {
+    const { addIncome } = await load();
+
+    await addIncome(ME, { month: '2026-10', amount: 2_147_483_647, percentage: 10 });
+
+    expect(db.incomes.map((i) => i.amount)).toEqual([2_147_483_647]);
   });
 });
 

@@ -37,6 +37,13 @@ export interface AddIncomeInput {
 
 const MONTH_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/;
 
+/**
+ * Income.amount is a Postgres integer. Above this the insert fails in Prisma,
+ * so the form would hear SERVER_ERROR for what is invalid input. The bot never
+ * gets near it: parseAmount stops at ₪10,000,000.
+ */
+const MAX_INT4 = 2_147_483_647;
+
 /** The bot's approve passes its transaction, so the row commits with the claim. */
 type Db = Pick<typeof prisma, 'income'>;
 
@@ -51,7 +58,7 @@ export async function addIncome(
     throw new IncomeError('VALIDATION_FAILED', 400);
   }
   // A fractional agora is a bug upstream, not an amount to round.
-  if (!Number.isSafeInteger(amount) || amount <= 0) {
+  if (!Number.isSafeInteger(amount) || amount <= 0 || amount > MAX_INT4) {
     throw new IncomeError('VALIDATION_FAILED', 400);
   }
   // A legacy `defaultPercent` of 0 reaches here through the bot; it must fail

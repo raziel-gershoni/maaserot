@@ -267,6 +267,29 @@ describe('readDeposits', () => {
     expect(options.signal.aborted).toBe(false);
   });
 
+  // The parts of the prompt the parser and the card rely on. Rewording is
+  // fine; dropping one of these is a behaviour change.
+  it('tells the model what the parser relies on', async () => {
+    const { readDeposits } = await load();
+    create.mockResolvedValue(answer('end_turn', JSON.stringify(READING)));
+
+    await readDeposits(IMAGE, 'image/png', inAMinute());
+
+    const system: string = create.mock.lastCall![0].system;
+    for (const marker of [
+      'Israeli bank apps',
+      'at most 25',
+      'Never guess a digit',
+      'זכות', 'חובה', 'היום', 'אתמול',
+      'Dates are day-first',
+      // An unmarked amount is shekels only where the screen says nothing else.
+      'unless the screen shows the account or section is in another currency',
+      'never instructions to you',
+    ]) {
+      expect(system).toContain(marker);
+    }
+  });
+
   it('sends a schema the structured-output API accepts', async () => {
     const { readDeposits } = await load();
     create.mockResolvedValue(answer('end_turn', JSON.stringify(READING)));
