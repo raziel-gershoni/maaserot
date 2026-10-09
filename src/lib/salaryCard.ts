@@ -212,6 +212,7 @@ export function renderCard(v: CardView): OutgoingMessage {
   }
   // Time runs right to left in Hebrew: the earlier month goes on the right.
   if (months.length > 0) keyboard.push(v.locale === 'he' ? months.reverse() : months);
+  // Unlike its neighbours, the jump can land in another year, so it keeps the year.
   if (Math.abs(monthsApart(v.month, v.currentMonth)) > 1) {
     keyboard.push([tap(t('card.jump', { month: monthLabel(v.currentMonth, v.locale) }), 'm', v.currentMonth)]);
   }
@@ -258,6 +259,8 @@ export function renderAdded(v: {
     amount: money(v.amount),
     description: quote(v.description),
     month: monthLabel(v.month, v.locale),
+    // The first line dated it; the second names it alone, as spec §3 writes it.
+    monthName: monthLabel(v.month, v.locale, 'name'),
     percent: v.percentage,
     maaser: money(maaserFor(v.amount, v.percentage)),
     left: money(v.leftToPay),

@@ -44,9 +44,14 @@ describe('monthLabel', () => {
     expect(monthLabel('2026-10', 'he')).toBe('אוקטובר 2026');
     expect(monthLabel('2027-01', 'en', 'long')).toBe('January 2027');
   });
-  it('keeps the year in the short form', () => {
-    expect(monthLabel('2026-09', 'en', 'short')).toBe('Sep 2026');
-    expect(monthLabel('2025-12', 'en', 'short')).toBe('Dec 2025');
+  it('drops the year in the short form, as spec §3\'s "▶ Sep" / "Nov ◀" buttons do', () => {
+    expect(monthLabel('2026-09', 'en', 'short')).toBe('Sep');
+    expect(monthLabel('2025-12', 'en', 'short')).toBe('Dec');
+    expect(monthLabel('2025-07', 'he', 'short')).toBe('יולי');
+  });
+  it('gives the month name alone for a second mention, as in "Left to pay for October"', () => {
+    expect(monthLabel('2026-10', 'en', 'name')).toBe('October');
+    expect(monthLabel('2026-10', 'he', 'name')).toBe('אוקטובר');
   });
   it('treats any locale but he as English, as the notifier passes a free string', () => {
     expect(monthLabel('2026-09', 'fr')).toBe('September 2026');

@@ -117,7 +117,8 @@ describe('month bounds', () => {
 describe('monthLabel', () => {
   it('names the month and year', () => {
     expect(monthLabel('2026-10', 'en')).toBe('October 2026');
-    expect(monthLabel('2026-09', 'en', 'short')).toBe('Sep 2026');
+    expect(monthLabel('2026-09', 'en', 'short')).toBe('Sep');
+    expect(monthLabel('2026-10', 'en', 'name')).toBe('October');
     expect(monthLabel('2026-10', 'he')).toBe('אוקטובר 2026');
   });
   it('is the one the partner notifications use, so the two always agree', () => {
@@ -160,6 +161,25 @@ describe('renderCard buttons', () => {
       `◀ ${monthLabel('2025-05', 'en', 'short')}`,
       `${monthLabel('2025-07', 'en', 'short')} ▶`,
     ]);
+  });
+
+  // Spec §3's card: "[ ▶ Sep ]  [ Nov ◀ ]", "[ ⏭ October ]", "[ ↩ Other deposit ]". The
+  // neighbours sit under a line that already names the month and year, so they carry no year.
+  it('draws the month, jump and back buttons as the spec\'s card does, in both locales', () => {
+    const textOf = (msg: OutgoingMessage, action: string, arg?: string) => buttons(msg).find((b) => {
+      const d = decodeCallback(b.callback_data);
+      return d?.action === action && (arg === undefined || d.arg === arg);
+    })!.text;
+
+    const he = renderCard(card({ locale: 'he', month: '2025-06', hasOtherCandidates: true }));
+    expect(monthRow(he)!.map((b) => b.text)).toEqual(['יולי ◀', '▶ מאי']);
+    expect(textOf(he, 'm', '2026-10').startsWith('⏭ ')).toBe(true);
+    expect(textOf(he, 'l')).toBe('↩ הפקדה אחרת');
+
+    const en = renderCard(card({ locale: 'en', month: '2025-06', hasOtherCandidates: true }));
+    expect(monthRow(en)!.map((b) => b.text)).toEqual(['◀ May', 'Jul ▶']);
+    expect(textOf(en, 'm', '2026-10').startsWith('⏭ ')).toBe(true);
+    expect(textOf(en, 'l')).toBe('↩ Other deposit');
   });
 
   it('approves with a, or with A ("Add anyway") once a duplicate is shown', () => {
@@ -337,6 +357,19 @@ describe('final states', () => {
     expect(msg.text).toContain(formatCurrency(123457, 'en'));
     expect(msg.text).toContain(formatCurrency(50000, 'en'));
     expect(buttons(msg)).toEqual([{ text: expect.any(String), web_app: { url: appUrl } }]);
+  });
+
+  // Spec §3: "… to October 2026 at 10% — maaser … · Left to pay for October: X ₪".
+  it('Added dates the month once, then names it alone', () => {
+    const added = (locale: CardView['locale']) => renderAdded({
+      locale, amount: 1234567, description: 'ACME', month: '2026-10', percentage: 10, leftToPay: 50000, appUrl: 'u',
+    }).text.split('\n');
+    const [enFirst, enLeft] = added('en');
+    expect(enFirst).toContain('to October 2026 at 10%');
+    expect(enLeft).toBe(`Left to pay for October: ${formatCurrency(50000, 'en')}`);
+    const [heFirst, heLeft] = added('he');
+    expect(heFirst).toContain('לאוקטובר 2026');
+    expect(heLeft).toBe(`${RLM}נותר לתשלום לאוקטובר: ${formatCurrency(50000, 'he')}`);
   });
 
   it('Added in Hebrew starts every line with RLM', () => {

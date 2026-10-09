@@ -70,10 +70,13 @@ export async function notifyPartnerIncomeAdded(
   const amount = formatCurrency(incomeAmount, partnerLocale);
   const unpaid = formatCurrency(groupUnpaid, partnerLocale);
   const label = monthLabel(month, partnerLocale);
+  // Dated once, then named alone, as spec §Changes 4 writes it and as the
+  // sender's own "Added" card words the same income.
+  const name = monthLabel(month, partnerLocale, 'name');
 
   const text = partnerLocale === 'he'
-    ? `${sender} הוסיף/ה הכנסה של ${amount} ל${label}.\nנותר לתשלום ל${label}: ${unpaid}`
-    : `${sender} added ${amount} income for ${label}.\nLeft to pay for ${label}: ${unpaid}`;
+    ? `${sender} הוסיף/ה הכנסה של ${amount} ל${label}.\nנותר לתשלום ל${name}: ${unpaid}`
+    : `${sender} added ${amount} income for ${label}.\nLeft to pay for ${name}: ${unpaid}`;
 
   return sendTelegramMessage(
     partnerTelegramId,

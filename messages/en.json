@@ -371,7 +371,7 @@
       "truncated": "Only the first {count} deposits are listed — if yours isn't here, crop the screenshot and send it again."
     },
     "final": {
-      "added": "✅ Added {amount} ({description}) to {month} at {percent}% — maaser {maaser}\nLeft to pay for {month}: {left}",
+      "added": "✅ Added {amount} ({description}) to {month} at {percent}% — maaser {maaser}\nLeft to pay for {monthName}: {left}",
       "cancelled": "✖ Cancelled{hasAmount, select, yes { · {amount}} other {}}",
       "expired": "⌛ Expired — send the screenshot again",
       "updated": "↓ updated"

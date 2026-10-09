@@ -731,9 +731,9 @@ export async function notifyPartnerIncomeAdded(partnerTelegramId: bigint, partne
   - the percentage is an integer from 1 to 100
 - **What `addIncome` writes:** `maaser = maaserFor(amount, percentage)`, `description ?? null`.
 - **`notifyPartnerOfIncome`:** moved from the route. It passes `month` through, and calls `calculateGroupMonthState(userId, month)` for that month.
-- **Notification text.** The month label comes from `Intl.DateTimeFormat(locale === 'he' ? 'he-IL' : 'en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' })`.
-  - he: `${escape(sender)} הוסיף/ה הכנסה של ${amount} ל${monthLabel}.\nנותר לתשלום ל${monthLabel}: ${unpaid}`
-  - en: `${escape(sender)} added ${amount} income for ${monthLabel}.\nLeft to pay for ${monthLabel}: ${unpaid}`
+- **Notification text.** The month label comes from `Intl.DateTimeFormat(locale === 'he' ? 'he-IL' : 'en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' })`. The second mention, `monthName`, is the month alone (`monthLabel(month, locale, 'name')`), as spec §Changes 4 writes "Left to pay for October" (changed in Task 7 fix round 4).
+  - he: `${escape(sender)} הוסיף/ה הכנסה של ${amount} ל${monthLabel}.\nנותר לתשלום ל${monthName}: ${unpaid}`
+  - en: `${escape(sender)} added ${amount} income for ${monthLabel}.\nLeft to pay for ${monthName}: ${unpaid}`
 - **Button URL:** `${APP_URL}/${locale}/income?month=${month}`.
 - **`escape`** replaces `&`, `<` and `>`.
 - **`telegramNotify` logs.** The file has three log lines today, and all three break the Logs rule. Swapping `fetch` for `sendMessage` is not enough on its own, because all three would survive. Change them as follows:
@@ -890,7 +890,7 @@ export function renderExpired(locale: Locale): OutgoingMessage;
 export function renderUpdatedPointer(locale: Locale): OutgoingMessage;
 export function renderNotice(locale: Locale, key: BotNoticeKey, values?: Record<string, string>, button?: { kind: 'app'; url: string; label?: 'openApp' | 'openAppTg' }): OutgoingMessage;
 export function toastText(locale: Locale, key: BotToastKey): string;
-export function monthLabel(month: string, locale: Locale, style?: 'long' | 'short'): string; // re-exported from israelTime.ts, which telegramNotify.ts also uses
+export function monthLabel(month: string, locale: Locale, style?: 'long' | 'name' | 'short'): string; // re-exported from israelTime.ts, which telegramNotify.ts also uses. 'long' "October 2026", 'name' "October", 'short' "Oct" (no year: spec §3's "▶ Sep" / "Nov ◀")
 export function defaultDescription(locale: Locale): string;
 export function localeFor(user: { locale?: string | null } | null, languageCode?: string): Locale;
 ```

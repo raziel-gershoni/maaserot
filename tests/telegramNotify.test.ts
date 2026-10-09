@@ -55,7 +55,7 @@ describe('notifyPartnerIncomeAdded', () => {
     expect(sendMessage).toHaveBeenCalledWith(
       BigInt(99),
       {
-        text: 'Dana &lt;b&gt;&amp; added ₪1,234.56 income for September 2026.\nLeft to pay for September 2026: ₪7.77',
+        text: 'Dana &lt;b&gt;&amp; added ₪1,234.56 income for September 2026.\nLeft to pay for September: ₪7.77',
         replyMarkup: {
           inline_keyboard: [
             [{ text: '📊 Open Maaserot', web_app: { url: 'https://app.test/en/income?month=2026-09' } }],
@@ -74,7 +74,7 @@ describe('notifyPartnerIncomeAdded', () => {
     const [, msg] = sendMessage.mock.lastCall!;
     expect(msg.text).toBe(
       `Dana הוסיף/ה הכנסה של ${formatCurrency(123456, 'he')} לספטמבר 2026.\n` +
-        `נותר לתשלום לספטמבר 2026: ${formatCurrency(777, 'he')}`
+        `נותר לתשלום לספטמבר: ${formatCurrency(777, 'he')}`
     );
     expect(msg.replyMarkup.inline_keyboard[0][0].web_app.url).toBe(
       'https://app.test/he/income?month=2026-09'

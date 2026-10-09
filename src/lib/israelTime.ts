@@ -52,17 +52,22 @@ export function toYmd(y: number, m: number, d: number): string {
 }
 
 /**
- * "October 2026" / "אוקטובר 2026"; short is "Oct 2026". The year stays in
- * the short form too: a bot card spans 24 months, and "Dec" seen in January
- * is ambiguous. Formatted in UTC from a UTC date, so the label is the month
- * itself whatever the server's time zone. The bot's cards and the partner
- * notifications both name months through this one function, so they agree.
+ * How a month is named to a user, in the spec's three forms:
+ *  - 'long', "October 2026" / "אוקטובר 2026": the first mention in a message.
+ *  - 'name', "October" / "אוקטובר": a later mention in a message whose first
+ *    mention already gave the year ("Left to pay for October").
+ *  - 'short', "Oct" / "אוק׳": a card's earlier and later buttons. They sit
+ *    under a line that names the card's month and year and are one month
+ *    either side of it, so a year would only widen them.
+ * Formatted in UTC from a UTC date, so the label is the month itself whatever
+ * the server's time zone. The bot's cards and the partner notifications both
+ * name months through this one function, so they agree.
  */
-export function monthLabel(month: string, locale: string, style: 'long' | 'short' = 'long'): string {
+export function monthLabel(month: string, locale: string, style: 'long' | 'name' | 'short' = 'long'): string {
   const [y, m] = month.split('-').map(Number);
   return new Intl.DateTimeFormat(locale === 'he' ? 'he-IL' : 'en-US', {
-    month: style,
-    year: 'numeric',
+    month: style === 'short' ? 'short' : 'long',
+    year: style === 'long' ? 'numeric' : undefined,
     timeZone: 'UTC',
   }).format(new Date(Date.UTC(y, m - 1, 1)));
 }

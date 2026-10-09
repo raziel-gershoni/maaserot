@@ -360,8 +360,8 @@
       "addAnyway": "✅ להוסיף בכל זאת",
       "earlier": "▶ {month}",
       "later": "{month} ◀",
-      "jump": "⏮ {month}",
-      "back": "↪ הפקדה אחרת",
+      "jump": "⏭ {month}",
+      "back": "↩ הפקדה אחרת",
       "cancel": "✖ ביטול"
     },
     "picker": {
@@ -371,7 +371,7 @@
       "truncated": "מוצגות רק {count} ההפקדות הראשונות — אם ההפקדה לא כאן, אפשר לחתוך את צילום המסך ולשלוח שוב."
     },
     "final": {
-      "added": "✅ נוספה הכנסה של {amount} ({description}) ל{month} — מעשר {percent}% = {maaser}\nנותר לתשלום ל{month}: {left}",
+      "added": "✅ נוספה הכנסה של {amount} ({description}) ל{month} — מעשר {percent}% = {maaser}\nנותר לתשלום ל{monthName}: {left}",
       "cancelled": "✖ בוטל{hasAmount, select, yes { · {amount}} other {}}",
       "expired": "⌛ פג התוקף — יש לשלוח שוב את צילום המסך",
       "updated": "↓ עודכן"
