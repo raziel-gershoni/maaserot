@@ -1,4 +1,10 @@
-import Anthropic, { BadRequestError } from '@anthropic-ai/sdk';
+import Anthropic, {
+  APIConnectionError,
+  APIConnectionTimeoutError,
+  APIError,
+  APIUserAbortError,
+  BadRequestError,
+} from '@anthropic-ai/sdk';
 import type { RawTransaction, Reading } from './depositParsing';
 
 /**
@@ -17,7 +23,7 @@ import type { RawTransaction, Reading } from './depositParsing';
  *    user looking at "Reading the screenshot…" for good.
  *  - It ends inside the caller's deadline, with time to spare for that reply.
  *  - Nothing the model wrote reaches a log. The response holds amounts and
- *    payer names; an error is logged by its class and status only.
+ *    payer names; an error is logged by its class name and status only.
  */
 
 export const DEPOSIT_MODEL = 'claude-opus-5-5';
@@ -124,6 +130,23 @@ export function isReading(value: unknown): value is Reading {
 }
 
 /**
+ * The name an error is logged under. Next minifies the SDK into the server
+ * bundle, so `constructor.name` there is a letter or two, and the SDK's errors
+ * never set `name`, which stays 'Error'. Their names are therefore fixed
+ * strings here, matched most specific first; the status logged beside the
+ * name tells the APIError subclasses apart. Anything else, such as a native
+ * TimeoutError or TypeError, keeps the name it carries.
+ */
+function errorName(err: unknown): unknown {
+  if (err instanceof BadRequestError) return 'BadRequestError';
+  if (err instanceof APIConnectionTimeoutError) return 'APIConnectionTimeoutError';
+  if (err instanceof APIUserAbortError) return 'APIUserAbortError';
+  if (err instanceof APIConnectionError) return 'APIConnectionError';
+  if (err instanceof APIError) return 'APIError';
+  return (err as { name?: unknown } | null)?.name;
+}
+
+/**
  * Transcribe the deposits on a bank screenshot. `deadline` is epoch ms, the
  * moment by which the caller must have replied.
  */
@@ -165,7 +188,7 @@ export async function readDeposits(
       { timeout: 20_000, maxRetries: 1, signal: AbortSignal.timeout(budget) }
     );
   } catch (err) {
-    console.error('[depositReader]', (err as object | null)?.constructor?.name, (err as { status?: number } | null)?.status);
+    console.error('[depositReader]', errorName(err), (err as { status?: number } | null)?.status);
     // The rest of the request never varies and its schema is tested, so a 400
     // is the API refusing this image: too large once decoded, or not an image
     // after all. Anything else, the deadline's abort included, is a passing

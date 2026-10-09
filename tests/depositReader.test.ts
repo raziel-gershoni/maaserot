@@ -1,12 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as Sdk from '@anthropic-ai/sdk';
 import type { RawTransaction, Reading } from '@/lib/depositParsing';
+import type { ReadResult } from '@/lib/depositReader';
 
 /**
  * The Claude call, with the SDK's client replaced by a fake whose
  * `messages.create` is a mock. The SDK's own error classes stay real, since
- * the reader tells a bad image from an outage by class. Nothing here reaches
- * the network, and the key is a fake.
+ * the reader tells a bad image from an outage, and names the error it logs, by
+ * class. Nothing here reaches the network, and the key is a fake.
  */
 
 const create = vi.fn();
@@ -16,13 +17,13 @@ let actual: typeof Sdk;
 async function load() {
   actual = await vi.importActual<typeof Sdk>('@anthropic-ai/sdk');
   vi.doMock('@anthropic-ai/sdk', () => ({
+    ...actual,
     default: class FakeAnthropic {
       messages = { create };
       constructor(opts: unknown) {
         constructed(opts);
       }
     },
-    BadRequestError: actual.BadRequestError,
   }));
   return import('@/lib/depositReader');
 }
@@ -73,6 +74,16 @@ function badRequest() {
     'Could not process image',
     new Headers()
   );
+}
+
+/**
+ * The same error as a production build ships it. Next minifies the bundled
+ * SDK, so `BadRequestError` runs as a class named `t`: the class chain is
+ * intact, and only `constructor.name` changes.
+ */
+function minified<T extends Error>(err: T): T {
+  const t = class extends (err.constructor as new (...args: never[]) => Error) {};
+  return Object.setPrototypeOf(err, t.prototype);
 }
 
 let error: ReturnType<typeof vi.spyOn>;
@@ -171,6 +182,42 @@ describe('readDeposits', () => {
     expect(await readDeposits(IMAGE, 'image/png', inAMinute())).toEqual({ kind: 'unreadable' });
     expect(error).toHaveBeenCalledTimes(1);
     expect(error).toHaveBeenCalledWith('[depositReader]', 'BadRequestError', 400);
+  });
+
+  it.each<[string, () => unknown, ReadResult['kind'], string, number | undefined]>([
+    ['a 400', () => minified(badRequest()), 'unreadable', 'BadRequestError', 400],
+    [
+      'a 429',
+      () => minified(new actual.RateLimitError(429, undefined, 'Rate limited', new Headers())),
+      'error',
+      'APIError',
+      429,
+    ],
+    [
+      'a 529',
+      () => minified(new actual.InternalServerError(529, undefined, 'Overloaded', new Headers())),
+      'error',
+      'APIError',
+      529,
+    ],
+    ['a connection timeout', () => minified(new actual.APIConnectionTimeoutError()), 'error', 'APIConnectionTimeoutError', undefined],
+    ['the deadline\'s abort', () => minified(new actual.APIUserAbortError()), 'error', 'APIUserAbortError', undefined],
+    [
+      'a lost connection',
+      () => minified(new actual.APIConnectionError({ message: 'socket hang up' })),
+      'error',
+      'APIConnectionError',
+      undefined,
+    ],
+    ['a native timeout', () => new DOMException('The operation timed out.', 'TimeoutError'), 'error', 'TimeoutError', undefined],
+    ['a TypeError', () => new TypeError('fetch failed'), 'error', 'TypeError', undefined],
+  ])('names %s in the log even when the bundle has minified its class', async (_name, thrown, kind, logged, status) => {
+    const { readDeposits } = await load();
+    create.mockRejectedValue(thrown());
+
+    expect(await readDeposits(IMAGE, 'image/png', inAMinute())).toEqual({ kind });
+    expect(error).toHaveBeenCalledTimes(1);
+    expect(error).toHaveBeenCalledWith('[depositReader]', logged, status);
   });
 
   it('is notConfigured without an API key, and never calls Claude', async () => {
