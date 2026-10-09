@@ -122,6 +122,7 @@ npm run lint
 - `src/lib/monthState.ts` - Month state calculation with GroupPaymentSnapshot
 - `src/lib/prisma.ts` - Prisma client singleton
 - `src/lib/auth.ts` - NextAuth configuration
+- `src/lib/salaryIntake/` - Telegram salary intake: a deposit screenshot or typed amount becomes a pending card, and an Income only on ✅; the only code that reads or writes PendingIncome
 
 **API Routes**
 - `src/app/api/income/route.ts` - Income CRUD operations
@@ -129,21 +130,23 @@ npm run lint
 - `src/app/api/payment/unified/route.ts` - Unified payment API (individual & group)
 - `src/app/api/auth/register/route.ts` - User registration
 - `src/app/api/auth/[...nextauth]/route.ts` - NextAuth handler
-- `src/app/api/shared/` - Shared access and group summary APIs
+- `src/app/api/telegram/webhook/route.ts` - Telegram bot webhook: checks `TELEGRAM_WEBHOOK_SECRET`, answers 200 and runs the salary intake in `after()`
 
 **Database Schema**
 - `prisma/schema.prisma` - Prisma schema with:
   - User, Income, FixedCharity (core models)
   - GroupPaymentSnapshot, GroupPaymentMember (payment tracking)
-  - SharedAccess (sharing & group features)
 
 **Components**
 - `src/components/PaymentModal.tsx` - Individual payment with slider
 - `src/components/GroupPaymentModal.tsx` - Group payment with slider
 
 **Tests**
-- `tests/payment.test.ts` - Integration tests for payment scenarios
-- `tests/utils.ts` - Test helper functions
+- `tests/payments.test.ts` - Integration tests for payment scenarios
+- `tests/reckoning.test.ts` - Month reckoning and group member resolution
+- `tests/monthState.group.test.ts` - Group month state on the history page
+- `tests/fakePrisma.ts` - In-memory Prisma client the tests mock `@/lib/prisma` with
+- `tests/salaryIntake.*.test.ts` - Telegram salary intake: screenshots, button taps, typed amounts, pending rows
 - `vitest.config.ts` - Vitest configuration
 
 **i18n**
@@ -218,7 +221,7 @@ const state = await calculateCurrentMonthState(userId, month);
 **Authentication**
 All protected routes must check session:
 ```typescript
-const session = await getServerSession(authOptions);
+const session = await auth();
 if (!session?.user?.id) {
   return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 }
@@ -258,10 +261,6 @@ NEXTAUTH_SECRET="generate-with-openssl-rand-base64-32"
 
 **GroupPaymentMember** - Many-to-many helper for efficient queries
 - Links users to their payment snapshots
-
-**SharedAccess** - Share and view data with partners
-- ownerId (who is sharing), viewerId (who can view)
-- isSelected (for group dashboard filtering)
 
 ## Known Considerations
 

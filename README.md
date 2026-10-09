@@ -67,11 +67,18 @@ Create a `.env` file in the project root. Never commit real secret values.
 | `NEXTAUTH_URL` | Yes | Base URL of the app (e.g. `http://localhost:3000`) |
 | `NEXTAUTH_SECRET` | Yes | NextAuth session secret (`openssl rand -base64 32`) |
 | `NEXT_PUBLIC_APP_URL` | Optional | Public base URL used for client-side links and email |
-| `TELEGRAM_BOT_TOKEN` | Optional | Bot token for Telegram Mini App `initData` validation |
+| `TELEGRAM_BOT_TOKEN` | Optional | Bot token for Telegram Mini App `initData` validation and the bot's Bot API calls |
 | `TELEGRAM_OAUTH_CLIENT_ID` | Optional | Client ID for the Telegram OAuth/OIDC web flow |
 | `TELEGRAM_OAUTH_CLIENT_SECRET` | Optional | Client secret for the Telegram OAuth/OIDC web flow |
+| `TELEGRAM_WEBHOOK_SECRET` | Optional | Secret the bot webhook checks on every update (`openssl rand -hex 32`); must match `setWebhook`'s `secret_token`. Unset, the webhook rejects every update |
+| `ANTHROPIC_API_KEY` | Optional | Claude API key for reading salary-deposit screenshots; unset, the bot asks for a typed amount instead |
+| `SALARY_INTAKE_USER_HOURLY` | Optional | Screenshot reads allowed per user in any rolling hour (default `10`) |
+| `SALARY_INTAKE_USER_DAILY` | Optional | Screenshot reads allowed per user in any rolling 24 hours (default `30`) |
+| `SALARY_INTAKE_DAILY_LIMIT` | Optional | Screenshot reads allowed across all users in any rolling 24 hours (default `200`) |
 | `RESEND_API_KEY` | Optional | Resend API key for transactional email |
 | `FROM_EMAIL` | Optional | Sender address for transactional email |
+
+Telegram does not keep the webhook's `secret_token` between calls: every later `setWebhook` call must send it again, or each update starts failing with 401.
 
 ### Install & run
 
