@@ -9,6 +9,7 @@ import {
   renderExpired,
   renderPicker,
   renderReading,
+  renderUpdatedPointer,
 } from '../salaryCard';
 import { editMessageText, type OutgoingMessage } from '../telegramBot';
 import { findDuplicateIncome } from './approve';
@@ -93,4 +94,9 @@ export async function showRow(ctx: Ctx, messageId: number, row: Row, opts?: Rend
   await edit(row, opts);
   const fresh = await getRow(row.id);
   if (fresh && (fresh.status !== row.status || fresh.version !== row.version)) await edit(fresh);
+}
+
+/** What an older message of a row becomes, so only the current card has buttons. */
+export async function showPointer(ctx: Ctx, messageId: number): Promise<void> {
+  await editMessageText(ctx.chatId, messageId, renderUpdatedPointer(ctx.sender.locale), { deadline: ctx.deadline });
 }
