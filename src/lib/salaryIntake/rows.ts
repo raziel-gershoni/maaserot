@@ -96,10 +96,15 @@ export async function createTypedRow(a: {
   }
 }
 
-/** Cleanup without a cron job: each new screenshot sweeps its sender's long-dead rows. */
-export async function deleteStaleRows(userId: string, now: Date): Promise<void> {
+/**
+ * Cleanup without a cron job: each new card sweeps every row that expired
+ * over a week ago. Everyone's, not just the sender's: a card left untapped
+ * keeps its unchosen bank lines, and its owner may never send another one
+ * (spec, Data kept). A row that long dead is safe to delete for anyone.
+ */
+export async function deleteStaleRows(now: Date): Promise<void> {
   await prisma.pendingIncome.deleteMany({
-    where: { userId, expiresAt: { lt: new Date(now.getTime() - CLEANUP_AFTER_MS) } },
+    where: { expiresAt: { lt: new Date(now.getTime() - CLEANUP_AFTER_MS) } },
   });
 }
 

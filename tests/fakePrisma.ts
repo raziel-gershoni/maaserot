@@ -244,8 +244,8 @@ export function createFakePrisma(seed: Partial<FakeDb> & { now?: () => Date } = 
 
   const tables = {
     income: {
-      findMany: async ({ where = {} }: { where?: Where } = {}) =>
-        db.incomes.filter((r) => incomeMatches(r, where)).map((r) => ({ ...r })),
+      findMany: async ({ where = {}, orderBy }: { where?: Where; orderBy?: OrderBy } = {}) =>
+        ordered(db.incomes.filter((r) => incomeMatches(r, where)), orderBy).map((r) => ({ ...r })),
       findFirst: async ({ where = {}, orderBy }: { where?: Where; orderBy?: OrderBy } = {}) => {
         const hit = ordered(db.incomes.filter((r) => incomeMatches(r, where)), orderBy)[0];
         return hit ? { ...hit } : null;

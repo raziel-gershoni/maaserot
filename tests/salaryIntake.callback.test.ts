@@ -92,6 +92,9 @@ const income = (patch: Partial<FakeIncome>): FakeIncome => ({
 
 const silenceErrors = () => vi.spyOn(console, 'error').mockImplementation(() => {});
 
+/** The longest stretch of a message that no placeholder fills in. */
+const fixedPart = (template: string) => template.split(/\{[^}]*\}/).sort((a, b) => b.length - a.length)[0];
+
 beforeEach(() => {
   fixClock();
   vi.clearAllMocks();
@@ -257,6 +260,37 @@ describe('✅ when it cannot add', () => {
 
       expect(db.incomes.filter((i) => i.userId === 'u1')).toHaveLength(blocked ? 0 : 1);
     }
+  });
+
+  it("names the sender's own match over a newer one of the partner's, whatever order they come in", async () => {
+    const row = cardRow();
+    const { tg, handleUpdate } = await setup({
+      pendingIncomes: [row],
+      incomes: [
+        income({ id: 'theirs', createdAt: new Date(Date.now() - HOUR) }),
+        income({ id: 'mine', userId: 'u1', amount: 1234567, createdAt: new Date(Date.now() - 2 * HOUR) }),
+      ],
+    });
+
+    await handleUpdate(tap(row, 'a', 1));
+
+    expect(screen(tg).text).toContain(fixedPart(he.bot.card.warnDuplicateSelf));
+    expect(screen(tg).text).not.toContain('Dana');
+  });
+
+  it('a match of a partner with no name is "your partner", not an empty name', async () => {
+    const row = cardRow();
+    const { tg, handleUpdate } = await setup({
+      pendingIncomes: [row],
+      incomes: [income({})],
+      users: [{ ...u1 }, { ...u2, name: null }],
+    });
+
+    await handleUpdate(tap(row, 'a', 1));
+
+    const text = screen(tg).text;
+    expect(text).toContain(`${he.bot.card.partnerFallback} כבר הוסיף/ה`);
+    expect(text).not.toContain('\u2068\u2069');
   });
 
   it('two open cards for the same deposit: the second asks "Add anyway", and A adds it', async () => {

@@ -278,6 +278,24 @@ describe('an amount sent on its own', () => {
     expect(db.incomes[0]).toMatchObject({ userId: 'u1', amount: 1250050, month: '2026-10', percentage: 10 });
   });
 
+  it('a typed card sweeps rows that expired over 7 days ago, as a screenshot does', async () => {
+    const expiredAgo = (days: number, userId: string) =>
+      pendingRow({
+        userId, status: 'OPEN', candidates: [salary, bonus],
+        createdAt: new Date(Date.now() - (days + 2) * 24 * HOUR), expiresAt: new Date(Date.now() - days * 24 * HOUR),
+      });
+    const stale = expiredAgo(8, 'u2');
+    const recent = expiredAgo(2, 'u1');
+    const { db, handleUpdate } = await setup({ pendingIncomes: [stale, recent] });
+
+    await handleUpdate(textUpdate({ text: '12,500', messageId: 600 }));
+
+    const ids = db.pendingIncomes.map((r) => r.id);
+    expect(ids).not.toContain(stale.id);
+    expect(ids).toContain(recent.id);
+    expect(db.pendingIncomes.find((r) => r.sourceMessageId === 600)).toMatchObject({ status: 'OPEN', amount: 1250000 });
+  });
+
   it("files a typed card under the Israeli month, while UTC is still in the last one", async () => {
     fixClock('2026-09-30T21:30:00Z'); // 1 Oct, 00:30 in Israel
     const { db, tg, handleUpdate } = await setup();

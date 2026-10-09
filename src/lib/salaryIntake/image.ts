@@ -107,7 +107,7 @@ export async function handleImage(ctx: Ctx, message: TgMessage): Promise<void> {
   const notice = (key: BotNoticeKey) => renderNotice(locale, key);
 
   try {
-    await deleteStaleRows(sender.id, now);
+    await deleteStaleRows(now);
     if (await quotaExceeded(sender.id, now)) {
       // Not cancelWith: a refused row must also stop counting toward the quota.
       await refuseForQuota(row.id);

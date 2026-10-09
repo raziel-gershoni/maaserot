@@ -148,6 +148,22 @@ describe('refuseForQuota', () => {
   });
 });
 
+describe('deleteStaleRows', () => {
+  it("deletes every user's rows that expired over 7 days ago, and only those", async () => {
+    const DAY = 24 * 60 * MIN;
+    const expired = (ms: number, userId: string) => open({ userId, expiresAt: new Date(NOW.getTime() - ms) });
+    const mine = expired(7 * DAY + MIN, 'u1');
+    const theirs = expired(30 * DAY, 'u2');
+    const atTheBound = expired(7 * DAY, 'u2');
+    const live = open();
+    const rows = await load([mine, theirs, atTheBound, live]);
+
+    await rows.deleteStaleRows(NOW);
+
+    expect(db.pendingIncomes.map((r) => r.id)).toEqual([atTheBound.id, live.id]);
+  });
+});
+
 describe('lookups', () => {
   it("rowForReply finds a row only in the sender's own chat", async () => {
     const mine = open({ cardMessageId: 500 });

@@ -44,16 +44,22 @@ export async function findDuplicateIncome(
   });
   const partner = partnership && (partnership.user1Id === userId ? partnership.user2 : partnership.user1);
 
-  const income = await db.income.findFirst({
+  const matches = await db.income.findMany({
     where: {
       userId: { in: partner ? [userId, partner.id] : [userId] },
       month: { in: [month, addMonths(month, 1)] },
       amount: { gte: amount - SAME_AMOUNT_AGOROT, lte: amount + SAME_AMOUNT_AGOROT },
     },
+    orderBy: { createdAt: 'desc' },
   });
+  // The sender's own match first: "you already added" is the plainer warning,
+  // and the name shown must not depend on the order the database returns.
+  // Otherwise the newest, the one most likely to be this deposit.
+  const income = matches.find((i) => i.userId === userId) ?? matches[0];
   if (!income) return null;
   return {
-    // null is how the card says "you"; a partner without a name is still not you.
+    // null is how the card says "you"; a partner without a name is still not
+    // you, and the card names them by a fallback.
     name: income.userId === userId ? null : (partner?.name ?? ''),
     month: income.month,
     amount: income.amount,

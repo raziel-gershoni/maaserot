@@ -349,6 +349,7 @@
       "fileTo": "← {month} · מעשר {percent}% = {maaser}",
       "warnDuplicateSelf": "⚠ כבר הוספת {amount} ב{month} — אולי זו אותה הפקדה?",
       "warnDuplicatePartner": "⚠ {name} כבר הוסיף/ה {amount} ב{month} — אולי זו אותה הפקדה?",
+      "partnerFallback": "בן/בת הזוג",
       "warnOtherOpen": "⚠ יש לך כרטיס פתוח נוסף על {amount} ב{month}.",
       "warnPaid": "⚠ ל{month} כבר נרשם תשלום — ההכנסה הזו תוסיף לו {maaser} מעשר.",
       "warnOldDate": "⚠ תאריך ההפקדה הוא {months, plural, one {לפני חודש} two {לפני חודשיים} other {לפני # חודשים}} — כדאי לבדוק אותו.",

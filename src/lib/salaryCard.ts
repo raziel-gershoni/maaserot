@@ -182,7 +182,8 @@ export function renderCard(v: CardView): OutgoingMessage {
     const values = { amount: money(dup.amount), month: monthLabel(dup.month, v.locale) };
     lines.push(dup.name === null
       ? t('card.warnDuplicateSelf', values)
-      : t('card.warnDuplicatePartner', { ...values, name: quote(dup.name) }));
+      // A partner with no name would leave an empty isolate where the name goes.
+      : t('card.warnDuplicatePartner', { ...values, name: dup.name.trim() ? quote(dup.name) : t('card.partnerFallback') }));
   }
   if (v.otherOpenSameAmount) lines.push(t('card.warnOtherOpen', { amount: money(v.amount), month }));
   if (v.monthPaid) lines.push(t('card.warnPaid', { month, maaser }));

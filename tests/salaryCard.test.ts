@@ -239,6 +239,16 @@ describe('renderCard text', () => {
     expect(text).toContain(`${FSI}Dana${PDI} already added ${formatCurrency(1234500, 'en')} in November 2026`);
   });
 
+  it('calls a partner with no name "your partner", rather than leaving an empty isolate', () => {
+    for (const name of ['', '  ']) {
+      const text = renderCard(card({ duplicate: { name, month: '2026-11', amount: 1234500 } })).text;
+      expect(text).toContain(`⚠ Your partner already added ${formatCurrency(1234500, 'en')} in November 2026`);
+      expect(text).not.toContain(`${FSI}${PDI}`);
+    }
+    expect(renderCard(card({ locale: 'he', duplicate: { name: '', month: '2026-11', amount: 1 } })).text)
+      .toContain('⚠ בן/בת הזוג כבר הוסיף/ה');
+  });
+
   it('warns about a date more than 40 days back, not at 40', () => {
     expect(renderCard(card({ depositDate: '2026-08-29', today: '2026-10-09' })).text).toContain('check the date');
     expect(renderCard(card({ depositDate: '2026-08-30', today: '2026-10-09' })).text).not.toContain('check the date');

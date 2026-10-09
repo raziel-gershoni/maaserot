@@ -349,6 +349,7 @@
       "fileTo": "→ {month} · maaser {percent}% = {maaser}",
       "warnDuplicateSelf": "⚠ You already added {amount} in {month} — maybe the same deposit?",
       "warnDuplicatePartner": "⚠ {name} already added {amount} in {month} — maybe the same deposit?",
+      "partnerFallback": "Your partner",
       "warnOtherOpen": "⚠ You have another open card for {amount} in {month}.",
       "warnPaid": "⚠ {month} already has a payment recorded; this adds {maaser} to it.",
       "warnOldDate": "⚠ The deposit date is {months, plural, one {# month} other {# months}} ago — check the date.",

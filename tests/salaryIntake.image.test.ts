@@ -536,20 +536,22 @@ describe('who and where', () => {
 });
 
 describe('housekeeping', () => {
-  it("deletes the sender's rows that expired over 7 days ago, and keeps the rest", async () => {
+  // Everyone's, not only the sender's: an untapped card keeps its unchosen
+  // bank lines, and its owner may never send another screenshot.
+  it('deletes every row that expired over 7 days ago, whoever it belongs to, and keeps the rest', async () => {
     const expiredAgo = (ms: number, userId = 'u1') =>
       pendingRow({ userId, viaImage: false, createdAt: new Date(Date.now() - ms - 2 * DAY), expiresAt: new Date(Date.now() - ms) });
     const stale = expiredAgo(8 * DAY);
     const recent = expiredAgo(2 * DAY);
-    const partners = expiredAgo(8 * DAY, 'u2');
-    const { db, handleUpdate } = await setup({ pendingIncomes: [stale, recent, partners] });
+    const others = { ...expiredAgo(8 * DAY, 'u9'), chatId: BigInt(999), status: 'OPEN' as const, candidates: [{ amount: 1 }] };
+    const { db, handleUpdate } = await setup({ pendingIncomes: [stale, recent, others] });
 
     await handleUpdate(photoUpdate({ messageId: 10 }));
 
     const ids = db.pendingIncomes.map((r) => r.id);
     expect(ids).not.toContain(stale.id);
+    expect(ids).not.toContain(others.id);
     expect(ids).toContain(recent.id);
-    expect(ids).toContain(partners.id);
   });
 });
 

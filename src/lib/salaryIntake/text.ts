@@ -6,6 +6,7 @@ import { appUrl, logError, type Ctx, type Sender } from './context';
 import { rowMessage, showPointer, showRow } from './render';
 import {
   createTypedRow,
+  deleteStaleRows,
   getRow,
   isExpired,
   newestOpenRow,
@@ -104,6 +105,8 @@ async function setAmount(ctx: Ctx, message: TgMessage, row: Row, amount: number,
 /** A number with no card to go to: a card of its own, with no Claude call and no quota. */
 async function startCard(ctx: Ctx, message: TgMessage, amount: number, now: Date): Promise<void> {
   const { sender, chatId } = ctx;
+  // A typed card is a new card too, so it sweeps as a screenshot does.
+  await deleteStaleRows(now);
   const row = await createTypedRow({
     userId: sender.id,
     chatId,
