@@ -1,4 +1,4 @@
-import { addDays, israelDate, isRealDate, toYmd } from './israelTime';
+import { addDays, addMonths, israelDate, isRealDate, toYmd } from './israelTime';
 
 /**
  * Turning what the model read off a bank screen into candidate incomes.
@@ -38,6 +38,10 @@ export interface Candidate {
   month: string;
   /** False when the screen showed no usable date and the sent day stood in. */
   dateFromImage: boolean;
+  /**
+   * Trimmed, and may be empty. Whoever stores or shows it falls back to
+   * `defaultDescription(locale)`, since only they know the locale.
+   */
   description: string;
   /** The model could not tell whether the line was incoming; the card warns. */
   directionUnknown: boolean;
@@ -47,6 +51,12 @@ export interface Candidate {
 export const MAX_CANDIDATES = 8;
 /** ₪10,000,000. Anything larger is a misread, not a salary. */
 export const MAX_AGOROT = 1_000_000_000;
+/**
+ * How many months back a card may file. The card's month buttons stop here
+ * too (`salaryCard.monthBounds`), so a card never starts on a month its
+ * buttons could not reach.
+ */
+export const MAX_MONTHS_BACK = 24;
 
 const SPACES = /\p{Zs}/gu;
 // LRM, RLM, ALM, the embeddings/overrides and the isolates, and a stray BOM:
@@ -92,7 +102,10 @@ export function parseAmount(text: string, direction: Direction): number | null {
  * The deposit's Israeli calendar date. Tomorrow is allowed because banks show
  * the value date, which can be the next business day. A date the screen does
  * not give, or gives impossibly, becomes the day the screenshot was sent, and
- * `dateFromImage` says so, so the card can tell the user.
+ * `dateFromImage` says so, so the card can tell the user. So does a date more
+ * than `MAX_MONTHS_BACK` months back: that is a misread year (1026) or a
+ * screenshot too old to file, and as the card's month it would sit outside
+ * the bounds every month button is checked against.
  *
  * All comparisons are on 'YYYY-MM-DD' strings, which order like dates.
  */
@@ -102,6 +115,8 @@ export function resolveDate(
 ): { date: string; dateFromImage: boolean } {
   const today = israelDate(sentAt);
   const tomorrow = addDays(today, 1);
+  const earliestMonth = addMonths(today.slice(0, 7), -MAX_MONTHS_BACK);
+  const usable = (date: string) => date <= tomorrow && date.slice(0, 7) >= earliestMonth;
   const missing = { date: today, dateFromImage: false };
   if (parts.relativeDay === 'today') return { date: today, dateFromImage: true };
   if (parts.relativeDay === 'yesterday') return { date: addDays(today, -1), dateFromImage: true };
@@ -113,15 +128,16 @@ export function resolveDate(
     // string it still sorts before tomorrow; it must not become a month.
     if (y < 1000 || y > 9999 || !isRealDate(y, month, day)) return missing;
     const date = toYmd(y, month, day);
-    return date <= tomorrow ? { date, dateFromImage: true } : missing;
+    return usable(date) ? { date, dateFromImage: true } : missing;
   }
   // No year on screen: the latest of last, this or next year that is not
-  // after tomorrow. Next year only ever wins for 01/01 seen on 31 Dec.
+  // after tomorrow. Next year only ever wins for 01/01 seen on 31 Dec. Last
+  // year is always within the month bound; `usable` just keeps one rule.
   const Y = Number(today.slice(0, 4));
   for (const y of [Y + 1, Y, Y - 1]) {
     if (!isRealDate(y, month, day)) continue;
     const date = toYmd(y, month, day);
-    if (date <= tomorrow) return { date, dateFromImage: true };
+    if (usable(date)) return { date, dateFromImage: true };
   }
   return missing;
 }

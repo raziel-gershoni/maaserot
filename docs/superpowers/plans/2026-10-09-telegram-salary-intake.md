@@ -238,7 +238,7 @@ Expected: all PASS, no type errors.
 - Test: `tests/depositParsing.test.ts`
 
 **Interfaces:**
-- Consumes: `israelDate`, `addDays`, `isRealDate`, `toYmd` (Task 1).
+- Consumes: `israelDate`, `addDays`, `addMonths`, `isRealDate`, `toYmd` (Task 1).
 - Produces:
 ```ts
 export type Direction = 'in' | 'out' | 'unknown';
@@ -254,6 +254,7 @@ export interface Candidate {
 }
 export const MAX_CANDIDATES = 8;
 export const MAX_AGOROT = 1_000_000_000;
+export const MAX_MONTHS_BACK = 24;   // the card's month-button lower bound; Task 7's monthBounds uses it
 export function parseAmount(text: string, direction: Direction): number | null;
 export function resolveDate(
   parts: Pick<RawTransaction, 'day' | 'month' | 'year' | 'relativeDay'>, sentAt: Date
@@ -340,6 +341,29 @@ describe('resolveDate', () => {
   it('adds 2000 to a two-digit year', () => {
     expect(resolveDate({ ...noDate, day: 5, month: 9, year: 26 }, at('2026-10-09T08:00:00Z')).date)
       .toBe('2026-09-05');
+  });
+  it.each([126, 19999, -5])('treats year %d, which cannot be written as YYYY, as missing', (year) => {
+    expect(resolveDate({ ...noDate, day: 5, month: 9, year }, at('2026-10-09T08:00:00Z')))
+      .toEqual({ date: '2026-10-09', dateFromImage: false });
+  });
+  // The card's month buttons stop 24 months back (2024-10 for October 2026),
+  // so no date older than that may become the card's month.
+  it.each([
+    [1999, 9, 5],   // a genuinely old screenshot
+    [1026, 9, 5],   // a misread year that is still four digits
+    [2024, 9, 30],  // the last day before the bound
+  ])('treats %d-%d-%d, before the 24-month bound, as missing', (year, month, day) => {
+    expect(resolveDate({ ...noDate, day, month, year }, at('2026-10-09T08:00:00Z')))
+      .toEqual({ date: '2026-10-09', dateFromImage: false });
+  });
+  it('keeps the first day of the 24-month bound', () => {
+    expect(resolveDate({ ...noDate, day: 1, month: 10, year: 2024 }, at('2026-10-09T08:00:00Z')))
+      .toEqual({ date: '2024-10-01', dateFromImage: true });
+  });
+  it('takes the bound from the Israeli month, not the UTC one', () => {
+    // 01:30 on 1 Oct in Israel, still 30 Sep in UTC: the bound is already 2024-10.
+    expect(resolveDate({ ...noDate, day: 30, month: 9, year: 2024 }, at('2026-09-30T22:30:00Z')))
+      .toEqual({ date: '2026-10-01', dateFromImage: false });
   });
   it('resolves "yesterday" sent on the 1st into the previous month', () => {
     expect(resolveDate({ ...noDate, relativeDay: 'yesterday' }, at('2026-11-01T06:00:00Z')))
@@ -440,22 +464,24 @@ export function parseAmount(text: string, direction: Direction): number | null {
 export function resolveDate(parts, sentAt) {
   const today = israelDate(sentAt);
   const tomorrow = addDays(today, 1);
+  const earliestMonth = addMonths(today.slice(0, 7), -MAX_MONTHS_BACK); // spec Rules → Too old
+  const usable = (date: string) => date <= tomorrow && date.slice(0, 7) >= earliestMonth;
   const missing = { date: today, dateFromImage: false };
   if (parts.relativeDay === 'today') return { date: today, dateFromImage: true };
   if (parts.relativeDay === 'yesterday') return { date: addDays(today, -1), dateFromImage: true };
   const { day, month } = parts;
   if (day == null || month == null) return missing;
   if (parts.year != null) {
-    const y = parts.year < 100 ? parts.year + 2000 : parts.year;
-    if (!isRealDate(y, month, day)) return missing;
+    const y = parts.year >= 0 && parts.year < 100 ? parts.year + 2000 : parts.year;
+    if (y < 1000 || y > 9999 || !isRealDate(y, month, day)) return missing; // must be writable as YYYY
     const date = toYmd(y, month, day);
-    return date <= tomorrow ? { date, dateFromImage: true } : missing;
+    return usable(date) ? { date, dateFromImage: true } : missing;
   }
   const Y = Number(today.slice(0, 4));
   for (const y of [Y + 1, Y, Y - 1]) {          // latest first
     if (!isRealDate(y, month, day)) continue;
     const date = toYmd(y, month, day);
-    if (date <= tomorrow) return { date, dateFromImage: true };
+    if (usable(date)) return { date, dateFromImage: true };
   }
   return missing;
 }
@@ -466,7 +492,7 @@ export function resolveDate(parts, sentAt) {
 - Skip `direction === 'out'` and `currency !== 'ILS'`.
 - `amount = parseAmount(t.amountText, t.direction)`; skip when it is null.
 - `const { date, dateFromImage } = resolveDate(t, sentAt)`.
-- Push `{ amount, date, month: date.slice(0, 7), dateFromImage, description: t.description.trim(), directionUnknown: t.direction === 'unknown' }`.
+- Push `{ amount, date, month: date.slice(0, 7), dateFromImage, description: t.description.trim(), directionUnknown: t.direction === 'unknown' }`. The description may be `''`; it has no locale here, so Tasks 7–9 apply `defaultDescription(locale)` wherever a candidate's description is shown or stored.
 - Return the first `MAX_CANDIDATES` items, with `truncated` set when more passed the filters.
 
 - [ ] **Step 4: Run**: `npx vitest run tests/depositParsing.test.ts && npx tsc --noEmit`. Expected: PASS.
@@ -821,7 +847,7 @@ export function isReading(value: unknown): value is Reading; // exported for tes
 - Test: `tests/salaryCard.test.ts`; also `tests/messages.test.ts`, which asserts exact key parity between he and en
 
 **Interfaces:**
-- Consumes: `formatCurrency`, `maaserFor` (calculations); `addMonths` (israelTime); `InlineKeyboard`, `OutgoingMessage` (Task 4); `Candidate` (Task 2).
+- Consumes: `formatCurrency`, `maaserFor` (calculations); `addMonths` (israelTime); `InlineKeyboard`, `OutgoingMessage` (Task 4); `Candidate`, `MAX_MONTHS_BACK` (Task 2).
 - Produces:
 ```ts
 export type Locale = 'he' | 'en';
@@ -829,7 +855,7 @@ export type CallbackAction = 'p' | 'm' | 'a' | 'A' | 'c' | 'l';
 export interface CallbackData { action: CallbackAction; id: string; version: number; arg?: string }
 export function encodeCallback(d: CallbackData): string;
 export function decodeCallback(data: string | undefined): CallbackData | null;
-export function monthBounds(currentMonth: string): { min: string; max: string }; // min = current−24, max = current
+export function monthBounds(currentMonth: string): { min: string; max: string }; // min = addMonths(current, -MAX_MONTHS_BACK) (current−24), max = current. resolveDate uses the same constant, so a card never starts below min.
 export function isAllowedMonth(month: string, currentMonth: string): boolean;
 export interface CardView {
   locale: Locale; id: string; version: number;
@@ -913,7 +939,7 @@ export function localeFor(user: { locale?: string | null } | null, languageCode?
 **Rendering rules (from the spec, §3):**
 - **Translator.** `createTranslator({ locale, messages: locale === 'en' ? en : he, namespace: 'bot' })`, with `import he from '../../messages/he.json'` and `import en from '../../messages/en.json'`.
 - **Money.** `formatCurrency(agorot, locale)`.
-- **Description.** `isolate(truncate(desc, 40))`, where `isolate = s => '⁨' + s + '⁩'`. `truncate` cuts to 40 code points and appends `…`.
+- **Description.** `isolate(truncate(desc, 40))`, where `isolate = s => '⁨' + s + '⁩'`. `truncate` cuts to 40 code points and appends `…`. In `renderPicker`, each line's `desc` is `c.description || defaultDescription(locale)`, because a candidate's description is `''` when the screen line had none (spec Rules → Description).
 - **Hebrew lines.** In `he`, prefix every rendered line with `'‏'`.
 - **Duplicate button.** When `duplicate` is set, the ✅ button is `addAnyway` with action `A`; otherwise it is `add` with action `a`.
 - **Month buttons.**
@@ -952,6 +978,7 @@ export function localeFor(user: { locale?: string | null } | null, languageCode?
     - In `he`, the month row is `[later, earlier]`. Assert the exact button texts using `monthLabel(..., 'he', 'short')`.
   - **Warnings.** Each warning line appears only when its flag is set (table-driven). The old-date warning appears for `depositDate` `'2026-08-29'` with `today` `'2026-10-09'` (41 days), but not at 40.
   - **Bidi.** In he, every line of `renderCard(...).text` starts with `‏`, and the description appears wrapped in `⁨…⁩`. A 60-character description is truncated before wrapping.
+  - **Picker fallback.** A picker candidate with description `''` renders its line with `⁨משכורת⁩` in he and `⁨Salary⁩` in en.
   - **Final texts.** `renderAdded` contains the formatted amount, the month label, `10%`, the maaser and the left-to-pay value, plus a `web_app` button to `appUrl`. `renderCancelled` contains the amount.
   - **`tests/messages.test.ts`.** The flattened key sets of `he.json` and `en.json` are equal.
 - [ ] **Step 2–4: fail → implement → pass** (`npx vitest run && npx tsc --noEmit`).
@@ -1024,6 +1051,7 @@ export async function showRow(ctx: Ctx, messageId: number, row: Row, opts?: { sa
 - **Builders:**
   - `photoUpdate({ messageId, date, mediaGroupId?, fromId? })`
   - `textUpdate({ text, messageId, date, replyTo?, fromId?, chatId? })`
+  - In both, `date` is Unix seconds, as Telegram sends it, and defaults to `Math.floor(Date.now() / 1000)`.
   - `tapUpdate({ data, messageId, fromId?, chatId? })`
   - `reading(transactions)`, which defaults a single `+12,345.67` incoming line dated 10/10
 - **Seed.** User `u1` has `telegramId 111n`, name `'Avi'`, `defaultPercent 10` and locale `'he'`. Partner `u2` has `telegramId 222n` and name `'Dana'`. There is one ACCEPTED partnership.
@@ -1050,6 +1078,7 @@ export async function showRow(ctx: Ctx, messageId: number, row: Row, opts?: { sa
     - text → `handleText`
   - Wrap everything in try/catch → `logError`.
 - **`image.ts`.** Follow the spec Flow 2 steps 1–10 exactly.
+  - **Sent time.** Step 7 is `toCandidates(reading, new Date(message.date * 1000))`. Telegram's `date` is Unix seconds, so `new Date(message.date)` lands in January 1970. Do not use `ctx.now()` either: it is the arrival time, which is later than the sent time when Telegram delivers late.
   - **Pick the photo.** Choose the size with the largest `width * height`.
   - **Media type.** Take it from the document mime, or `image/jpeg` for a photo. After download, verify the magic bytes:
     - JPEG: `ff d8 ff`
@@ -1063,7 +1092,7 @@ export async function showRow(ctx: Ctx, messageId: number, row: Row, opts?: { sa
 
     | Outcome | Row | Placeholder |
     |---|---|---|
-    | 1 candidate | `finishReading`, `status OPEN` | the card. Copy the candidate's fields into the columns, `percentage: sender.defaultPercent`, `candidates: [that candidate]`. |
+    | 1 candidate | `finishReading`, `status OPEN` | the card. Copy the candidate's fields into the columns, except that an empty `description` becomes `defaultDescription(sender.locale)` (a line with no description trims to `''`). Also `percentage: sender.defaultPercent` and `candidates: [that candidate]`. |
     | several candidates | `status OPEN` | the picker. Store all candidates. |
     | 0 candidates | `CANCELLED` | the `notBankScreen` or `onlyOutgoing` notice, with an Open app button to `${appUrl()}/${locale}/income` |
     | read error | `CANCELLED` | the matching notice: `error` → `readError`, `tooLong` → `tooLong`, `unreadable` → `unreadable`, `notConfigured` → `notConfigured` |
@@ -1092,6 +1121,8 @@ export async function showRow(ctx: Ctx, messageId: number, row: Row, opts?: { sa
   12. **Unknown sender (`fromId 999`) →** a message with a `web_app` URL ending `/tg`, and no row.
   13. **Group chat →** nothing sent.
   14. **Cleanup.** A row of `u1` that expired 8 days ago is deleted when a new photo arrives. One that expired 2 days ago is kept.
+  15. **The sent time, not the arrival time.** With the clock at 2026-10-12T08:00Z, send `photoUpdate` with `date` = the Unix seconds of 2026-09-30T08:00Z, and a reading line with `relativeDay: 'today'` (day, month and year null) → the row has `depositDate '2026-09-30'` and `month '2026-09'`. This fails for both `ctx.now()` and `new Date(seconds)`.
+  16. **A blank description.** A reading line with description `'   '` → `row.description === 'משכורת'` for the `he` sender. With `u1` seeded with locale `'en'` → `'Salary'`.
 - [ ] **Step 2–4: fail → implement → pass** (`npx vitest run && npx tsc --noEmit`).
 - [ ] **Step 5: Commit**: `feat(bot): read salary screenshots into pending incomes`
 
@@ -1109,7 +1140,7 @@ export async function showRow(ctx: Ctx, messageId: number, row: Row, opts?: { sa
   4. Exactly one `answerCallbackQuery`, in try/catch.
   5. Then act.
 - **Acting.**
-  - **`p` (pick):** `updateOpen(... { amount, month, depositDate, dateFromImage, description, percentage: sender.defaultPercent })`, using the indexed candidate. The index must be `< candidates.length`.
+  - **`p` (pick):** `updateOpen(... { amount, month, depositDate, dateFromImage, description: c.description || defaultDescription(sender.locale), percentage: sender.defaultPercent })`, using the indexed candidate `c`. The index must be `< candidates.length`.
   - **`m` (month):** requires `isAllowedMonth(arg, israelMonth(now))`, then `updateOpen({ month })`.
   - **`l` (back to list):** requires `candidates.length > 1`. Set `amount`, `month`, `depositDate`, `description` and `percentage` to null. The row then renders as the picker.
   - **`c` (cancel):** `cancelOpen`.
@@ -1144,6 +1175,7 @@ export async function showRow(ctx: Ctx, messageId: number, row: Row, opts?: { sa
   14. **`answerCallbackQuery` rejects** → the approve still commits.
   15. **Picker row, `p:1`** → the card shows the second candidate, and `l` returns to the picker.
   16. **Approve on a row whose `cardMessageId` (500) ≠ the tapped message (400)** → the approve proceeds. Message 500 gets the final state, and message 400 gets `renderUpdatedPointer`.
+  17. **Picker row whose second candidate has description `''`** → `p:1` sets `row.description` to `'משכורת'`, and the card shows `⁨משכורת⁩`.
 - [ ] **Step 2–4: fail → implement → pass.**
 - [ ] **Step 5: Commit**: `feat(bot): approve, change month, pick and cancel from the card`
 

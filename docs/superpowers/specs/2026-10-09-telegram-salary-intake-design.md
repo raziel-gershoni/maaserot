@@ -238,7 +238,9 @@ No one runs a migration against any database by hand.
    - Download into memory. The buffer is dropped at the end of the request.
 6. **Read.** `readDeposits(buffer, mediaType, deadline)`, as described in
    Claude call below.
-7. **Pick out deposits.** `toCandidates(reading, message.date)`:
+7. **Pick out deposits.** `toCandidates(reading, new Date(message.date * 1000))`.
+   Telegram's `message.date` is Unix seconds, and it is the sent time, not
+   the time the update arrives, which can be later.
    - drop `out` lines and non-ILS lines
    - drop amounts that fail `parseAmount`
    - keep `unknown` lines, marked `directionUnknown`
@@ -534,6 +536,12 @@ const result = await prisma.$transaction(async (tx) => {
     remains, treat it as missing. So 10/10 sent on 9 Oct gives this year,
     01/01 sent on 31 Dec at 23:50 gives next year, and 31/12 sent on 1 Jan
     gives last year.
+  - **Too old:** a date from either rule whose month is before today's
+    month − 24 (the month buttons' lower bound) is treated as missing. So
+    05/09/1999, or a misread year such as 1026, files by the sent day
+    instead of starting the card on a month its buttons cannot reach. Only
+    the lower side is bounded: a value date of tomorrow may still fall in
+    the next month.
   - **Missing:** today, with `dateFromImage = false`.
 - **Month.** The `YYYY-MM` of the resolved date. The card's month buttons may
   change it within the bounds.
@@ -541,8 +549,10 @@ const result = await prisma.$transaction(async (tx) => {
   selected and shown on the card. Approve records exactly that value.
 - **Maaser.** `maaserFor(amount, percent) = Math.round(amount * (percent / 100))`.
   It is the existing expression, now used in every place that computes maaser.
-- **Description.** The candidate's description. Otherwise `"משכורת"` or
-  `"Salary"`, in the user's locale.
+- **Description.** The candidate's description, trimmed. If that is empty,
+  or there is no candidate, `"משכורת"` or `"Salary"`, in the user's locale.
+  The fallback applies wherever a candidate's description is shown or
+  stored: the single-candidate card, a pick, and the picker lines.
 
 ## Changes to existing code
 
@@ -673,6 +683,7 @@ All tests run without a database or network.
   - yearless 29/02 in 2026 → missing
   - 29/02 sent 2025-03-01 → 2024-02-29
   - explicit year two days ahead → missing
+  - an explicit date before the 24-month bound (05/09/1999) → missing
   - `yesterday` sent on the 1st → the previous month
   - a DST-day 23:30
 - **`depositParsing.toCandidates`**
@@ -717,6 +728,8 @@ All tests run without a database or network.
     - the same screenshot sent twice in 10 min → one card, then "Already got this one"
     - `readDeposits` returns `error` or hangs past the deadline → error message, row `CANCELLED`
     - the placeholder edit fails → row `CANCELLED`
+    - a screenshot sent on 30 Sep, delivered on 12 Oct, with a "today" line → date 2026-09-30, month 2026-09
+    - a blank description → `"משכורת"` for a `he` sender, `"Salary"` for an `en` sender
   - **Approving**
     - **approve twice → one `Income`**; the second answer is "Already added"
     - approve with a stale version → no `Income`, "The card changed"

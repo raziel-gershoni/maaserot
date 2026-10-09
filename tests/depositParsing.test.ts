@@ -78,6 +78,25 @@ describe('resolveDate', () => {
     expect(resolveDate({ ...noDate, day: 5, month: 9, year }, at('2026-10-09T08:00:00Z')))
       .toEqual({ date: '2026-10-09', dateFromImage: false });
   });
+  // The card's month buttons stop 24 months back (2024-10 for October 2026),
+  // so no date older than that may become the card's month.
+  it.each([
+    [1999, 9, 5],   // a genuinely old screenshot
+    [1026, 9, 5],   // a misread year that is still four digits
+    [2024, 9, 30],  // the last day before the bound
+  ])('treats %d-%d-%d, before the 24-month bound, as missing', (year, month, day) => {
+    expect(resolveDate({ ...noDate, day, month, year }, at('2026-10-09T08:00:00Z')))
+      .toEqual({ date: '2026-10-09', dateFromImage: false });
+  });
+  it('keeps the first day of the 24-month bound', () => {
+    expect(resolveDate({ ...noDate, day: 1, month: 10, year: 2024 }, at('2026-10-09T08:00:00Z')))
+      .toEqual({ date: '2024-10-01', dateFromImage: true });
+  });
+  it('takes the bound from the Israeli month, not the UTC one', () => {
+    // 01:30 on 1 Oct in Israel, still 30 Sep in UTC: the bound is already 2024-10.
+    expect(resolveDate({ ...noDate, day: 30, month: 9, year: 2024 }, at('2026-09-30T22:30:00Z')))
+      .toEqual({ date: '2026-10-01', dateFromImage: false });
+  });
   it('resolves "yesterday" sent on the 1st into the previous month', () => {
     expect(resolveDate({ ...noDate, relativeDay: 'yesterday' }, at('2026-11-01T06:00:00Z')))
       .toEqual({ date: '2026-10-31', dateFromImage: true });
