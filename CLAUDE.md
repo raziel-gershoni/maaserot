@@ -136,6 +136,7 @@ npm run lint
 - `prisma/schema.prisma` - Prisma schema with:
   - User, Income, FixedCharity (core models)
   - GroupPaymentSnapshot, GroupPaymentMember (payment tracking)
+  - PendingIncome (a bot card awaiting ✅; read and written only by `src/lib/salaryIntake/`)
 
 **Components**
 - `src/components/PaymentModal.tsx` - Individual payment with slider
@@ -146,6 +147,7 @@ npm run lint
 - `tests/reckoning.test.ts` - Month reckoning and group member resolution
 - `tests/monthState.group.test.ts` - Group month state on the history page
 - `tests/fakePrisma.ts` - In-memory Prisma client the tests mock `@/lib/prisma` with
+- `tests/setup.ts` - Loads `.env`, then deletes the live secrets (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET`, `ANTHROPIC_API_KEY`) so no test can reach Telegram or Claude
 - `tests/salaryIntake.*.test.ts` - Telegram salary intake: screenshots, button taps, typed amounts, pending rows
 - `vitest.config.ts` - Vitest configuration
 
@@ -223,7 +225,7 @@ All protected routes must check session:
 ```typescript
 const session = await auth();
 if (!session?.user?.id) {
-  return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  return apiError('UNAUTHORIZED', 401);
 }
 ```
 
@@ -234,6 +236,16 @@ Required in `.env`:
 DATABASE_URL="postgresql://user:password@host/database?sslmode=require"
 NEXTAUTH_URL="http://localhost:3000"
 NEXTAUTH_SECRET="generate-with-openssl-rand-base64-32"
+```
+
+Telegram salary intake (all optional; see the README's table and `.env.example`):
+```bash
+TELEGRAM_BOT_TOKEN=            # without it the bot cannot reply
+TELEGRAM_WEBHOOK_SECRET=       # must match setWebhook's secret_token; unset, the webhook answers 401
+ANTHROPIC_API_KEY=             # unset, the bot asks for a typed amount
+SALARY_INTAKE_USER_HOURLY=10   # screenshot reads per user per rolling hour
+SALARY_INTAKE_USER_DAILY=30    # ... per user per rolling 24 h
+SALARY_INTAKE_DAILY_LIMIT=200  # ... across all users per rolling 24 h
 ```
 
 ## Internationalization
@@ -261,6 +273,11 @@ NEXTAUTH_SECRET="generate-with-openssl-rand-base64-32"
 
 **GroupPaymentMember** - Many-to-many helper for efficient queries
 - Links users to their payment snapshots
+
+**PendingIncome** - A Telegram bot card: a deposit read from a screenshot or a typed amount, awaiting ✅
+- status READING → OPEN → APPROVED or CANCELLED; `version` is bumped on every change and carried in the buttons
+- An Income is written only by approving one, in a transaction with the claim
+- Expires 48 h after creation; deleted 7 days after that
 
 ## Known Considerations
 
