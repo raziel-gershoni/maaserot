@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addDays, addMonths, israelDate, israelMonth, isRealDate, monthLabel } from '@/lib/israelTime';
+import { addDays, addMonths, israelDate, israelMonth, isRealDate, monthLabel, toYmd } from '@/lib/israelTime';
 
 describe('israelMonth', () => {
   it.each([
@@ -19,6 +19,17 @@ describe('israelDate', () => {
     expect(israelDate(new Date('2026-10-09T21:30:00Z'))).toBe('2026-10-10');
     expect(israelDate(new Date('2026-10-09T20:30:00Z'))).toBe('2026-10-09');
   });
+
+  // 21:30Z either side of each switch: a fixed offset gets one of each pair wrong.
+  // Israel goes to UTC+3 on 27 Mar 2026 and back to UTC+2 on 25 Oct 2026.
+  it.each([
+    ['2026-03-26T21:30:00Z', '2026-03-26'], // UTC+2: 23:30 on the 26th
+    ['2026-03-27T21:30:00Z', '2026-03-28'], // UTC+3: 00:30 on the 28th
+    ['2026-10-24T21:30:00Z', '2026-10-25'], // UTC+3: 00:30 on the 25th
+    ['2026-10-25T21:30:00Z', '2026-10-25'], // UTC+2: 23:30 on the 25th
+  ])('either side of a DST switch: %s → %s', (iso, date) => {
+    expect(israelDate(new Date(iso))).toBe(date);
+  });
 });
 
 describe('addDays / addMonths', () => {
@@ -35,6 +46,12 @@ describe('addDays / addMonths', () => {
     expect(isRealDate(2026, 2, 29)).toBe(false);
     expect(isRealDate(2026, 13, 1)).toBe(false);
     expect(isRealDate(2026, 4, 31)).toBe(false);
+    expect(isRealDate(2026, 1, 0)).toBe(false);
+    expect(isRealDate(2026, 1.5, 1)).toBe(false);
+  });
+  it('toYmd pads the month and day', () => {
+    expect(toYmd(2026, 3, 5)).toBe('2026-03-05');
+    expect(toYmd(2026, 12, 31)).toBe('2026-12-31');
   });
 });
 

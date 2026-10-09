@@ -281,6 +281,20 @@ describe('an amount sent on its own', () => {
     ]);
   });
 
+  it('as a reply to the picker: a card for the day it was sent, dateFromImage false', async () => {
+    const picker = pickerRow({ cardMessageId: 500 });
+    const { db, tg, handleUpdate } = await setup({ pendingIncomes: [picker] });
+
+    await handleUpdate(textUpdate({ text: '12,500', messageId: 600, replyTo: 500 }));
+
+    expect(rowOf(db, picker.id)).toMatchObject({
+      status: 'OPEN', version: 2, amount: 1250000, month: '2026-10', depositDate: TODAY,
+      dateFromImage: false, description: 'משכורת', percentage: 10, cardMessageId: FIRST_SENT_ID,
+    });
+    expect(screen(tg, 500)).toEqual(renderUpdatedPointer('he'));
+    expect(tg.sent.map((s) => s.msg)).toEqual([renderCard(cardView(rowOf(db, picker.id), { hasOtherCandidates: true }))]);
+  });
+
   it('takes the percentage from the sender when the amount fills a picker', async () => {
     const picker = pickerRow();
     const { db, handleUpdate } = await setup({
@@ -331,6 +345,17 @@ describe('an amount sent on its own', () => {
     expect(ids).not.toContain(stale.id);
     expect(ids).toContain(recent.id);
     expect(db.pendingIncomes.find((r) => r.sourceMessageId === 600)).toMatchObject({ status: 'OPEN', amount: 1250000 });
+  });
+
+  // By message.date, as a screenshot with no date is: not by when it arrived.
+  it('files a typed card by the Israeli day it was sent, though it arrives the next day', async () => {
+    fixClock('2026-10-01T00:30:00Z'); // 03:30 on 1 Oct in Israel
+    const { db, handleUpdate } = await setup();
+
+    // 23:30 on 30 Sep in Israel.
+    await handleUpdate(textUpdate({ text: '12,500', messageId: 600, date: sentAt('2026-09-30T20:30:00Z') }));
+
+    expect(db.pendingIncomes[0]).toMatchObject({ month: '2026-09', depositDate: '2026-09-30', dateFromImage: false });
   });
 
   it("files a typed card under the Israeli month, while UTC is still in the last one", async () => {

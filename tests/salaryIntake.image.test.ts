@@ -488,6 +488,26 @@ describe('files sent as documents', () => {
     expect(reader.mock.calls[0][1]).toBe('image/png');
   });
 
+  it('a WebP file is read as a WebP, and one whose bytes are not WebP is not read', async () => {
+    const WEBP = Buffer.concat([Buffer.from('RIFF'), Buffer.from([0x24, 0, 0, 0]), Buffer.from('WEBPVP8 ')]);
+    const { db, tg, reader, handleUpdate } = await setup();
+    tg.downloadFile.mockResolvedValueOnce(WEBP);
+
+    await handleUpdate(documentUpdate({ file_id: 'doc-1', mime_type: 'image/webp', file_size: 50_000 }));
+
+    expect(reader.mock.calls[0][1]).toBe('image/webp');
+
+    // A PNG sent with a WebP mime type: the sender's claim, not the bytes.
+    const update = documentUpdate({ file_id: 'doc-2', mime_type: 'image/webp', file_size: 50_000 });
+    update.message!.message_id = 11;
+    tg.downloadFile.mockResolvedValueOnce(PNG);
+
+    await handleUpdate(update);
+
+    expect(reader).toHaveBeenCalledTimes(1);
+    expect(db.pendingIncomes.find((r) => r.sourceMessageId === 11)!.status).toBe('CANCELLED');
+  });
+
   it('a file Telegram already says is over 7.5 MB → "too large" without asking for it', async () => {
     const { db, tg, handleUpdate } = await setup();
 
@@ -534,6 +554,8 @@ describe('who and where', () => {
     expect(tg.answered).toHaveLength(1);
     expect(tg.answered[0].text).toBe(notice('unknownSender'));
     expect(tg.sent).toHaveLength(1);
+    // The tap's spinner stops first; the message with the button follows.
+    expect(tg.answerCallbackQuery.mock.invocationCallOrder[0]).toBeLessThan(tg.sendMessage.mock.invocationCallOrder[0]);
     expect(webAppUrls(tg.sent[0].msg)[0]).toMatch(/\/tg$/);
   });
 

@@ -1,11 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  answerCallbackQuery,
   callTelegram,
   downloadFile,
   editMessageText,
   getFile,
   isNotModified,
   isTelegramConfigured,
+  sendChatAction,
   sendMessage,
   TelegramError,
 } from '@/lib/telegramBot';
@@ -89,6 +91,16 @@ describe('callTelegram', () => {
     expect(e).toMatchObject({ method: 'sendMessage', description: 'Bad Request: x', status: 400 });
   });
 
+  // Telegram's error contract is the body's `ok`, not the status.
+  it('rejects an { ok: false } reply even with a 200', async () => {
+    fetchMock.mockResolvedValue(reply({ ok: false, description: 'Bad Request: chat not found' }, 200));
+
+    const e = await rejection(callTelegram('getMe', {}));
+
+    expectNoSecret(e);
+    expect(e).toMatchObject({ method: 'getMe', description: 'Bad Request: chat not found', status: 200 });
+  });
+
   it('names the HTTP status when the reply is not JSON', async () => {
     fetchMock.mockResolvedValue(new Response('<html>Bad Gateway</html>', { status: 502 }));
 
@@ -102,7 +114,7 @@ describe('callTelegram', () => {
     fetchMock.mockImplementation(hang);
     const started = Date.now();
 
-    await expect(callTelegram('getMe', {}, { timeoutMs: 20 })).rejects.toThrow();
+    await expect(callTelegram('getMe', {}, { timeoutMs: 20 })).rejects.toMatchObject({ name: 'TimeoutError' });
 
     expect(Date.now() - started).toBeLessThan(1000);
   });
@@ -111,7 +123,7 @@ describe('callTelegram', () => {
     fetchMock.mockImplementation(hang);
     const started = Date.now();
 
-    await expect(callTelegram('getMe', {}, { deadline: Date.now() + 20 })).rejects.toThrow();
+    await expect(callTelegram('getMe', {}, { deadline: Date.now() + 20 })).rejects.toMatchObject({ name: 'TimeoutError' });
 
     expect(Date.now() - started).toBeLessThan(1000);
   });
@@ -190,6 +202,28 @@ describe('editMessageText', () => {
     await editMessageText(BigInt(123), 5, { text: 'card', replyMarkup: keyboard });
 
     expect(lastBody().reply_markup).toEqual(keyboard);
+  });
+});
+
+describe('answerCallbackQuery and sendChatAction', () => {
+  it('answers a tap with its text, or with none', async () => {
+    fetchMock.mockImplementation(async () => reply({ ok: true, result: true }));
+
+    await answerCallbackQuery('q1', 'Not yours');
+    expect(lastCall().url.endsWith('/answerCallbackQuery')).toBe(true);
+    expect(lastBody()).toEqual({ callback_query_id: 'q1', text: 'Not yours' });
+
+    await answerCallbackQuery('q2');
+    expect(lastBody()).toEqual({ callback_query_id: 'q2' });
+  });
+
+  it('sends a chat action to the chat, with a bigint id as a string', async () => {
+    fetchMock.mockResolvedValue(reply({ ok: true, result: true }));
+
+    await sendChatAction(BigInt(123), 'typing');
+
+    expect(lastCall().url.endsWith('/sendChatAction')).toBe(true);
+    expect(lastBody()).toEqual({ chat_id: '123', action: 'typing' });
   });
 });
 

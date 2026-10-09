@@ -122,7 +122,8 @@ describe('toCandidates', () => {
   it('keeps incoming and unknown ILS lines, drops outgoing and foreign ones', () => {
     const { candidates } = toCandidates({ isBankScreen: true, transactions: [
       tx({ amountText: '+12,345.67' }),
-      tx({ direction: 'out', amountText: '-300.00' }),
+      // Unsigned, so only the direction filter can drop it: a minus would be dropped by parseAmount anyway.
+      tx({ direction: 'out', amountText: '300.00' }),
       tx({ direction: 'unknown', amountText: '500' }),
       tx({ currency: 'other' }),
       tx({ amountText: 'garbage' }),

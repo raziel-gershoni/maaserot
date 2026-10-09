@@ -99,6 +99,7 @@ afterEach(() => {
   // tests/setup.ts removed the real key; leave it removed.
   delete process.env.ANTHROPIC_API_KEY;
   vi.restoreAllMocks();
+  vi.useRealTimers();
 });
 
 describe('readDeposits', () => {
@@ -237,6 +238,41 @@ describe('readDeposits', () => {
     expect(create).not.toHaveBeenCalled();
   });
 
+  describe('the time budget', () => {
+    // Date only, so the clock stands still between the deadline and the check.
+    const freeze = () => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date('2026-10-12T08:00:00Z'));
+    };
+
+    it.each([
+      ['is capped at 35 s however far off the deadline is', 60_000, 35_000],
+      ['keeps 8 s before the deadline for the reply', 30_000, 22_000],
+      ['still calls Claude with exactly 10 s', 18_000, 10_000],
+    ])('%s', async (_, left, budget) => {
+      freeze();
+      const timeout = vi.spyOn(AbortSignal, 'timeout');
+      const { readDeposits } = await load();
+      create.mockResolvedValue(answer('end_turn', JSON.stringify(READING)));
+
+      await readDeposits(IMAGE, 'image/png', Date.now() + left);
+
+      expect(create).toHaveBeenCalledTimes(1);
+      expect(timeout.mock.calls).toEqual([[budget]]);
+      expect(create.mock.lastCall![1].signal).toBe(timeout.mock.results[0].value);
+    });
+
+    it('does not call Claude a millisecond under 10 s', async () => {
+      freeze();
+      const timeout = vi.spyOn(AbortSignal, 'timeout');
+      const { readDeposits } = await load();
+
+      expect(await readDeposits(IMAGE, 'image/png', Date.now() + 17_999)).toEqual({ kind: 'error' });
+      expect(create).not.toHaveBeenCalled();
+      expect(timeout).not.toHaveBeenCalled();
+    });
+  });
+
   it('sends the image to claude-opus-5-5 at low effort, with one retry and a deadline signal', async () => {
     const { readDeposits, DEPOSIT_MODEL } = await load();
     create.mockResolvedValue(answer('end_turn', JSON.stringify(READING)));
@@ -288,6 +324,22 @@ describe('readDeposits', () => {
     ]) {
       expect(system).toContain(marker);
     }
+  });
+
+  // Nullable as a type array, and closed enums: what isReading and toCandidates expect back.
+  it('lets a date part be null and keeps direction, currency and relativeDay to their known values', async () => {
+    const { readDeposits } = await load();
+    create.mockResolvedValue(answer('end_turn', JSON.stringify(READING)));
+
+    await readDeposits(IMAGE, 'image/png', inAMinute());
+
+    const props = create.mock.lastCall![0].output_config.format.schema.properties.transactions.items.properties;
+    for (const part of ['day', 'month', 'year']) expect(props[part]).toEqual({ type: ['integer', 'null'] });
+    expect(props.relativeDay).toEqual({ enum: ['today', 'yesterday', null] });
+    expect(props.direction).toEqual({ type: 'string', enum: ['in', 'out', 'unknown'] });
+    expect(props.currency).toEqual({ type: 'string', enum: ['ILS', 'other'] });
+    expect(props.amountText).toEqual({ type: 'string' });
+    expect(props.description).toEqual({ type: 'string' });
   });
 
   it('sends a schema the structured-output API accepts', async () => {

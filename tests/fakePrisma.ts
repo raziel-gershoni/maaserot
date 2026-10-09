@@ -11,7 +11,8 @@
  * The Telegram intake leans on database behaviour for its correctness, so the
  * fake emulates that behaviour rather than just storing rows:
  *  - `$transaction` rolls back. A throw inside the callback restores every
- *    table, so a failed approve really does leave its row OPEN.
+ *    table, so a failed approve really does leave its row OPEN. Callbacks
+ *    run one at a time, so one's rollback never undoes another's writes.
  *  - PendingIncome's two unique constraints raise P2002. That is how a
  *    redelivered update or the second item of an album is turned away.
  *  - Conditional writes (`gt`/`gte`/`lt`/`lte`/`not`, `{ increment }`) report
@@ -23,7 +24,8 @@
  * unsupported shape throws loudly rather than silently returning nothing. On
  * the new tables so does a `where` the intake does not use: any PendingIncome
  * key outside its list, and a User lookup by anything but `id` or a bigint
- * `telegramId`.
+ * `telegramId`. A PendingIncome create naming a column the table lacks, or a
+ * `chatId` that is not a bigint, throws too.
  */
 
 export interface FakeIncome {
@@ -114,6 +116,13 @@ type PendingIncomeData = {
   [K in keyof FakePendingIncome]?: FakePendingIncome[K] | { increment: number };
 };
 
+/** PendingIncome's columns a create may name; `id` is the database's. */
+const PENDING_INCOME_COLUMNS = new Set([
+  'userId', 'chatId', 'sourceMessageId', 'mediaGroupId', 'viaImage', 'cardMessageId', 'candidates',
+  'amount', 'month', 'depositDate', 'dateFromImage', 'description', 'percentage', 'status', 'version',
+  'incomeId', 'createdAt', 'expiresAt',
+]);
+
 /** The `where` keys the intake filters PendingIncome on. Anything else is a typo or a new query. */
 const PENDING_INCOME_WHERE_KEYS = new Set([
   'id', 'userId', 'chatId', 'status', 'version', 'expiresAt', 'createdAt',
@@ -168,16 +177,23 @@ function applyData(row: object, data: object) {
   }
 }
 
-/** Newest-row lookups are the only ordering the code asks for. */
+/**
+ * Newest-row lookups are the only ordering the code asks for. Rows created in
+ * the same millisecond tie on createdAt; they are broken by insertion order in
+ * the same direction, so 'desc' puts the one added last first, as "newest"
+ * means. (Postgres leaves a tie's order undefined; a test must not rely on it
+ * going the other way.)
+ */
 function ordered<T extends { createdAt?: Date }>(rows: T[], orderBy?: OrderBy): T[] {
   if (!orderBy) return rows;
   if (Object.keys(orderBy).join() !== 'createdAt') {
     throw new Error(`fakePrisma: unsupported orderBy ${JSON.stringify(orderBy)}`);
   }
   const sign = orderBy.createdAt === 'desc' ? -1 : 1;
-  return [...rows].sort(
-    (a, b) => sign * ((a.createdAt?.getTime() ?? 0) - (b.createdAt?.getTime() ?? 0))
-  );
+  return rows
+    .map((row, index) => ({ row, index }))
+    .sort((a, b) => sign * ((a.row.createdAt?.getTime() ?? 0) - (b.row.createdAt?.getTime() ?? 0) || a.index - b.index))
+    .map(({ row }) => row);
 }
 
 export function createFakePrisma(seed: Partial<FakeDb> & { now?: () => Date } = {}) {
@@ -380,6 +396,16 @@ export function createFakePrisma(seed: Partial<FakeDb> & { now?: () => Date } = 
 
     pendingIncome: {
       create: async ({ data }: { data: PendingIncomeCreate }) => {
+        // Prisma refuses a column the table lacks, and a number where the
+        // column is a bigint would never equal the bigint a lookup passes.
+        for (const key of Object.keys(data)) {
+          if (!PENDING_INCOME_COLUMNS.has(key)) {
+            throw new Error(`fakePrisma: pendingIncome.create got unknown column "${key}"`);
+          }
+        }
+        if (typeof data.chatId !== 'bigint') {
+          throw new Error('fakePrisma: pendingIncome.create needs chatId as a bigint');
+        }
         const row: FakePendingIncome = {
           id: nextCuid(),
           mediaGroupId: null,
@@ -454,25 +480,36 @@ export function createFakePrisma(seed: Partial<FakeDb> & { now?: () => Date } = 
     $transaction<T>(fn: (tx: FakeClient) => Promise<T>): Promise<T>;
   }
 
+  // The transaction running now; the next one waits for it to settle.
+  let running: Promise<unknown> = Promise.resolve();
+
   const client: FakeClient = {
     ...tables,
-    // Approve takes a per-user advisory lock with it. The fake runs one
-    // callback at a time, so there is nothing to lock.
+    // Approve takes a per-user advisory lock with it. $transaction below
+    // already runs one callback at a time, so there is nothing left to lock.
     $executeRaw: async () => 0,
     // Prisma hands the callback a scoped client; the fake hands over itself,
     // so `tx.$executeRaw` exists. A throw puts every table back as it was —
     // in place, because tests hold references to the `db` arrays.
+    // Callbacks are queued, one at a time, as approve's lock lines them up.
+    // Interleaved, a rollback would restore its own snapshot over writes that
+    // another transaction committed meanwhile. A callback must not start a
+    // transaction of its own: it would wait on itself.
     $transaction: async (fn) => {
-      const snapshot = structuredClone(db);
-      try {
-        return await fn(client);
-      } catch (err) {
-        for (const key of Object.keys(db) as (keyof FakeDb)[]) {
-          const table = db[key] as unknown[];
-          table.splice(0, table.length, ...(snapshot[key] as unknown[]));
+      const run = running.then(async () => {
+        const snapshot = structuredClone(db);
+        try {
+          return await fn(client);
+        } catch (err) {
+          for (const key of Object.keys(db) as (keyof FakeDb)[]) {
+            const table = db[key] as unknown[];
+            table.splice(0, table.length, ...(snapshot[key] as unknown[]));
+          }
+          throw err;
         }
-        throw err;
-      }
+      });
+      running = run.catch(() => {});
+      return run;
     },
   };
 

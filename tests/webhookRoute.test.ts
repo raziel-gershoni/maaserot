@@ -95,7 +95,9 @@ describe('POST /api/telegram/webhook', () => {
   });
 
   it('answers before the work is done, so a slow read never makes Telegram retry', async () => {
-    handleUpdate.mockReturnValue(new Promise(() => {}));
+    // Once: restoreAllMocks would not reset a lasting implementation on Vitest 3,
+    // and a later test awaiting `pending` would then hang.
+    handleUpdate.mockReturnValueOnce(new Promise(() => {}));
     const { POST } = await load();
 
     const res = await POST(post(JSON.stringify(UPDATE), SECRET));

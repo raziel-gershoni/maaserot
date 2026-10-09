@@ -246,10 +246,14 @@ describe('✅ when it cannot add', () => {
     expect(tg.answered.map((a) => a.text)).toEqual([undefined, undefined]);
   });
 
-  it('an Income filed under the next month counts too; one ₪1 off or two months away does not', async () => {
+  it('an Income within ₪1 either way, or filed under the next month, counts; ₪1.01 off or two months away does not', async () => {
     for (const [seeded, blocked] of [
       [income({ month: '2026-11' }), true],
+      // ₪1 either way is inclusive; one agora more is not.
+      [income({ amount: 1234567 - 100 }), true],
+      [income({ amount: 1234567 + 100 }), true],
       [income({ amount: 1234567 - 101 }), false],
+      [income({ amount: 1234567 + 101 }), false],
       [income({ month: '2026-12' }), false],
       [income({ userId: 'u9' }), false],
     ] as const) {
