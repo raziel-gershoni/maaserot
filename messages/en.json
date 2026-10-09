@@ -153,7 +153,7 @@
     "loadFailed": "Couldn't load income",
     "noIncomeInMonth": "No income was recorded in this month",
     "viewingPastMonth": "Viewing a past month",
-    "viewingPastMonthHelp": "Income can only be recorded in the current month. This month is view-only."
+    "viewingPastMonthHelp": "Past months are view-only here. You can send the bot a screenshot of a deposit from that month."
   },
   "charities": {
     "title": "Fixed Charities",
@@ -340,5 +340,76 @@
     "USER_NOT_FOUND": "No user found with that address",
     "VALIDATION_FAILED": "Some details aren't valid. Check them and try again",
     "WEAK_PASSWORD": "Password must be at least 8 characters"
+  },
+  "bot": {
+    "defaultDescription": "Salary",
+    "card": {
+      "title": "💰 Salary deposit · {description}",
+      "deposited": "{amount} · deposited {date}",
+      "fileTo": "→ {month} · maaser {percent}% = {maaser}",
+      "warnDuplicateSelf": "⚠ You already added {amount} in {month} — maybe the same deposit?",
+      "warnDuplicatePartner": "⚠ {name} already added {amount} in {month} — maybe the same deposit?",
+      "warnOtherOpen": "⚠ You have another open card for {amount} in {month}.",
+      "warnPaid": "⚠ {month} already has a payment recorded; this adds {maaser} to it.",
+      "warnOldDate": "⚠ The deposit date is {months, plural, one {# month} other {# months}} ago — check the date.",
+      "warnDirection": "⚠ Couldn't tell if this line is incoming.",
+      "infoNoDate": "ℹ No deposit date found — used the day you sent it.",
+      "hintReply": "Reply with a number to fix the amount.",
+      "saveFailed": "⚠ Couldn't save — tap ✅ again.",
+      "add": "✅ Add",
+      "addAnyway": "✅ Add anyway",
+      "earlier": "◀ {month}",
+      "later": "{month} ▶",
+      "jump": "⏭ {month}",
+      "back": "↩ Other deposit",
+      "cancel": "✖ Cancel"
+    },
+    "picker": {
+      "title": "💰 Which deposit should I add?",
+      "line": "{n}. {amount} · {date} · {description}{unknown, select, yes { ⚠} other {}}",
+      "button": "{n} · {amount} · {date}",
+      "truncated": "Only the first {count} deposits are listed — if yours isn't here, crop the screenshot and send it again."
+    },
+    "final": {
+      "added": "✅ Added {amount} ({description}) to {month} at {percent}% — maaser {maaser}\nLeft to pay for {month}: {left}",
+      "cancelled": "✖ Cancelled{hasAmount, select, yes { · {amount}} other {}}",
+      "expired": "⌛ Expired — send the screenshot again",
+      "updated": "↓ updated"
+    },
+    "notice": {
+      "welcome": "Hi! 👋 Send me a screenshot of a salary deposit from your bank app, or type the amount, and I'll suggest an income for you to approve.",
+      "unknownSender": "I only know accounts that sign in through Telegram — open the app once. If you signed up with email, the bot can't use that account yet.",
+      "reading": "🔎 Reading the screenshot…",
+      "notBankScreen": "This doesn't look like a bank screen. Send a screenshot of the deposit, or type the amount.",
+      "onlyOutgoing": "I found only outgoing or non-₪ lines. Send a screenshot of the deposit, or type the amount.",
+      "tooMany": "Too many screenshots — try again later.",
+      "tooLarge": "Image too large — send it as a photo.",
+      "notConfigured": "Reading screenshots isn't set up yet — type the amount instead.",
+      "readError": "Couldn't read that right now — try again in a minute, or type the amount.",
+      "tooLong": "That screenshot has too many lines — crop it to the deposit and send it again.",
+      "unreadable": "I couldn't read this image — send a clear screenshot of the deposit, or type the amount.",
+      "alreadyGot": "Already got this one ↑",
+      "alreadyAdded": "Already added ✅",
+      "stillReading": "Still reading — one moment.",
+      "closedCard": "This card is closed. Send the screenshot again, or type the amount.",
+      "staleReply": "Reply to the newest card to change its amount.",
+      "hint": "Send me a screenshot of a salary deposit, or type the amount.",
+      "unsupportedFile": "Send a screenshot (photo).",
+      "checkPercent": "Check your default percentage in Settings.",
+      "alreadyAddedReply": "Already added to {month}. Edit it in the app."
+    },
+    "toast": {
+      "invalid": "This card is no longer valid",
+      "notYours": "Not yours",
+      "alreadyAdded": "Already added",
+      "cancelled": "Cancelled",
+      "stillReading": "Still reading — one moment",
+      "expired": "Expired — send the screenshot again",
+      "changed": "The card changed — check it and tap again"
+    },
+    "button": {
+      "openApp": "📊 Open in the app",
+      "openAppTg": "📲 Open Maaserot"
+    }
   }
 }
