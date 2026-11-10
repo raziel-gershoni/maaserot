@@ -177,6 +177,8 @@ export default function TelegramEntryPage() {
 
     if (!tg?.initData) {
       // Not inside Telegram — hand the viewer to the normal login flow.
+      // A full load, so the server picks the locale and the login page.
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination
       window.location.href = '/';
       return;
     }
@@ -196,6 +198,9 @@ export default function TelegramEntryPage() {
           const locale = negotiateLang(
             tg.initDataUnsafe?.user?.language_code
           );
+          // A full load, so the server renders the app with the session
+          // cookie that signIn just set.
+          // eslint-disable-next-line @next/next/no-location-assign-relative-destination
           window.location.href = `/${locale}`;
         }
       })

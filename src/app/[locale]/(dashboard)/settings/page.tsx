@@ -130,6 +130,9 @@ export default function SettingsPage() {
       if (settings.locale !== originalSettings?.locale) {
         document.cookie = `NEXT_LOCALE=${settings.locale}; path=/; max-age=31536000`;
         setTimeout(() => {
+          // A full load rather than a client navigation, so the server
+          // renders the whole page, layout included, in the new language.
+          // eslint-disable-next-line @next/next/no-location-assign-relative-destination
           window.location.href = `/${settings.locale}/settings`;
         }, 1000);
       } else {
