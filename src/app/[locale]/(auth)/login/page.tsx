@@ -77,6 +77,9 @@ function LoginForm() {
   // Detect Telegram Mini App environment
   useEffect(() => {
     if (window.Telegram?.WebApp?.initData) {
+      // window.Telegram does not exist on the server, so this cannot be read
+      // during render without a hydration mismatch.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setIsTelegram(true);
     }
   }, []);
@@ -85,6 +88,9 @@ function LoginForm() {
   useEffect(() => {
     const code = normalizeAuthError(searchParams.get('error'));
     if (code) {
+      // Seeds state that handleSubmit also writes and clears, so it cannot
+      // simply be derived from the URL during render.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setErrorValue(code);
     }
   }, [searchParams]);

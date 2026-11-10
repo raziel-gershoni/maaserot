@@ -240,11 +240,16 @@ export default function IncomeView({ maxMonth }: { maxMonth: string }) {
   );
 
   useEffect(() => {
+    // Fetching the month's incomes is the external sync an effect is for; the
+    // loader raising its own loading flag first is intended.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadIncomes();
   }, [loadIncomes]);
 
   // Leaving a month drops any in-flight row interaction with it.
   useEffect(() => {
+    // A deliberate reset in response to the URL's month changing.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setEditingId(null);
     setRowError(null);
     setConfirmDeleteId(null);

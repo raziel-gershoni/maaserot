@@ -94,7 +94,6 @@ export default function TelegramAuth() {
 
     // Reads window.Telegram and starts the sign-in handshake on mount, which
     // cannot happen during render. Guarded to one attempt by the ref above.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     authenticate();
   }, [authenticate]);
 

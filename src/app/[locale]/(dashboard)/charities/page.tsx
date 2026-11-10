@@ -177,14 +177,6 @@ export default function CharitiesPage() {
   const tErrors = useTranslations('errors');
   const locale = useLocale();
 
-  useEffect(() => {
-    fetchCharities();
-  // Mount-only fetch. The fetcher closes over next-intl's `t`, which is not
-  // guaranteed to be referentially stable, so listing it here would re-run the
-  // request on every render.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   const fetchCharities = async () => {
     try {
       const response = await fetch('/api/charities');
@@ -204,6 +196,19 @@ export default function CharitiesPage() {
       setIsFetching(false);
     }
   };
+
+  // Declared after the fetcher it calls: react-hooks 7.1 rejects reading a
+  // const before its declaration, even from an effect that runs later.
+  useEffect(() => {
+    // Fetching on mount is the external sync an effect is for; every state
+    // update in the fetcher lands after the request resolves.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchCharities();
+  // Mount-only fetch. The fetcher closes over next-intl's `t`, which is not
+  // guaranteed to be referentially stable, so listing it here would re-run the
+  // request on every render.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const retryFetch = () => {
     setIsFetching(true);

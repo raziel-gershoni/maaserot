@@ -63,14 +63,6 @@ export default function SettingsPage() {
   const tCommon = useTranslations('common');
   const tErrors = useTranslations('errors');
 
-  useEffect(() => {
-    fetchSettings();
-  // Mount-only fetch. The fetcher closes over next-intl's `t`, which is not
-  // guaranteed to be referentially stable, so listing it here would re-run the
-  // request on every render.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   const fetchSettings = async () => {
     setIsLoading(true);
     setLoadError('');
@@ -94,6 +86,19 @@ export default function SettingsPage() {
       setIsLoading(false);
     }
   };
+
+  // Declared after the fetcher it calls: react-hooks 7.1 rejects reading a
+  // const before its declaration, even from an effect that runs later.
+  useEffect(() => {
+    // Fetching on mount is the external sync an effect is for; the fetcher
+    // raising its own loading flag first is intended.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchSettings();
+  // Mount-only fetch. The fetcher closes over next-intl's `t`, which is not
+  // guaranteed to be referentially stable, so listing it here would re-run the
+  // request on every render.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

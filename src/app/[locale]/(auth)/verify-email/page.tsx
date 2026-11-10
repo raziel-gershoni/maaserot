@@ -68,6 +68,9 @@ function VerifyEmailContent() {
       const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
       return () => clearTimeout(timer);
     } else if (countdown === 0 && !canResend) {
+      // The timer's last tick re-enables resending; handleResend also writes
+      // this flag, so it is state rather than a value derived from countdown.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setCanResend(true);
     }
   }, [countdown, canResend]);

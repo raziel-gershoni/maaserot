@@ -211,7 +211,6 @@ export default function TelegramEntryPage() {
 
     // Kicks off the Telegram handshake on mount and moves the state machine
     // out of 'loading'. Guarded to one attempt by the ref above.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     authenticate();
   }, [authenticate]);
 

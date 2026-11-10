@@ -257,6 +257,9 @@ export default function PartnershipPage() {
   );
 
   useEffect(() => {
+    // Fetching on mount is the external sync an effect is for; the fetcher
+    // raising its own loading state first is intended.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchPartnerships();
   }, [fetchPartnerships]);
 
