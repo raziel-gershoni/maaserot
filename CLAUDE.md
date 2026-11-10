@@ -149,7 +149,7 @@ npm run lint
 - `tests/fakePrisma.ts` - In-memory Prisma client the tests mock `@/lib/prisma` with
 - `tests/setup.ts` - Loads `.env`, then deletes the live secrets (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET`, `ANTHROPIC_API_KEY`) so no test can reach Telegram or Claude
 - `tests/salaryIntake.*.test.ts` - Telegram salary intake: screenshots, button taps, typed amounts, pending rows
-- `vitest.config.ts` - Vitest configuration
+- `vitest.config.mts` - Vitest configuration
 
 **i18n**
 - `src/i18n/routing.ts` - Locale routing config

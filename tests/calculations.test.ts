@@ -18,7 +18,7 @@ describe('getCurrentMonth', () => {
   it('is the Israeli month, not the server month', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-09-30T22:30:00Z'));
-    // The suite runs in UTC (vitest.config.ts), as Vercel does, so the
+    // The suite runs in UTC (vitest.config.mts), as Vercel does, so the
     // server's own month is still September here.
     expect(new Date().getMonth() + 1).toBe(9);
     expect(getCurrentMonth()).toBe('2026-10');

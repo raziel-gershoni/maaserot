@@ -1,5 +1,9 @@
 import { defineConfig } from 'vitest/config';
-import path from 'path';
+import { fileURLToPath } from 'node:url';
+
+// .mts so Vite loads it as ESM: as a .ts in a package without "type": "module"
+// it is ESM syntax in a CommonJS file, which Vite 8 warns its future native
+// config loader will not support.
 
 export default defineConfig({
   test: {
@@ -15,7 +19,7 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './src'),
+      '@': fileURLToPath(new URL('./src', import.meta.url)),
     },
   },
 });
