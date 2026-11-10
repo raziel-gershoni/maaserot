@@ -54,7 +54,7 @@ Maaserot lets a user log each month's income, apply a configurable charity perce
 
 ### Prerequisites
 
-- Node.js 22.12 or newer (Vercel runs 24, pinned by `engines` in `package.json`)
+- Node.js 24, which Vercel runs (pinned by `engines` in `package.json`). Node 26 also works locally; npm just prints an engine warning.
 - A PostgreSQL database (Neon, or any local/hosted Postgres)
 
 ### Environment variables

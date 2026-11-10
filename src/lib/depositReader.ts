@@ -131,11 +131,12 @@ export function isReading(value: unknown): value is Reading {
 
 /**
  * The name an error is logged under. Next minifies the SDK into the server
- * bundle, so `constructor.name` there is a letter or two, and the SDK's errors
- * never set `name`, which stays 'Error'. Their names are therefore fixed
- * strings here, matched most specific first; the status logged beside the
- * name tells the APIError subclasses apart. Anything else, such as a native
- * TimeoutError or TypeError, keeps the name it carries.
+ * bundle, so `constructor.name` there is a letter or two. The SDK sets `name`
+ * on its errors only since 1.6, so their names are fixed strings here, the
+ * same whatever the SDK version or the bundler does, matched most specific
+ * first; the status logged beside the name tells the APIError subclasses
+ * apart. Anything else, such as a native TimeoutError or TypeError, keeps the
+ * name it carries.
  */
 function errorName(err: unknown): unknown {
   if (err instanceof BadRequestError) return 'BadRequestError';
